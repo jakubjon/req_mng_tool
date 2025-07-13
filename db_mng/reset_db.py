@@ -1,5 +1,11 @@
+import os
+import sys
+
+# Add the parent directory to the path so we can import from app
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app import app, db
-from models import Requirement, CellHistory, Group, ExcelUpload
+from app.models import Requirement, CellHistory, Group, ExcelUpload
 
 def reset_database():
     """Drop and recreate all database tables"""

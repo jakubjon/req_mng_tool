@@ -3,11 +3,14 @@
 Database initialization script for Docker setup
 """
 import os
+import sys
 from dotenv import load_dotenv
-from app import app, db
 
-# Import models to ensure they are registered with SQLAlchemy
-from models import Requirement, CellHistory, Group, ExcelUpload
+# Add the parent directory to the path so we can import from app
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from app import app, db
+from app.models import Requirement, CellHistory, Group, ExcelUpload
 
 # Load environment variables
 load_dotenv()

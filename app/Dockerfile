@@ -11,13 +11,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY requirements.txt .
+COPY app/requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY . .
+COPY app/ .
+
+# Copy db_mng directory (will be copied from build context)
+COPY db_mng ./db_mng/
 
 # Create uploads directory
 RUN mkdir -p uploads

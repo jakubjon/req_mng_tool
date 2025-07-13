@@ -1,289 +1,127 @@
-# Deployment Guide
+# Requirements Management Tool
 
-## Quick Start (Local Development)
+A Flask-based web application for managing requirements with hierarchical groups, Excel import/export, and Directus CMS integration.
 
-1. **Clone and navigate to the project:**
-```bash
-cd req_mng_tool
+## Project Structure
+
+```
+req_mng_tool/
+├── app/                    # Main application
+│   ├── app.py             # Flask application
+│   ├── models.py          # Database models
+│   ├── config.py          # Configuration
+│   ├── Dockerfile         # Docker configuration
+│   ├── requirements.txt   # Python dependencies
+│   ├── static/            # Static files (CSS, JS)
+│   └── templates/         # HTML templates
+├── db_mng/                # Database management scripts
+│   ├── init_db.py         # Database initialization
+│   ├── reset_db.py        # Database reset
+│   └── create_sample_excel.py # Sample data creation
+├── docker-compose.yml     # Docker orchestration
+├── setup-env.ps1         # Environment setup script
+└── uploads/              # File uploads directory
 ```
 
-2. **Start the application:**
+## Deployment Methods
+
+### Method 1: Full Docker Compose Deployment
+
+**For production or complete containerized deployment:**
+
 ```bash
+# Start all services (Flask app, Directus, PostgreSQL)
 docker-compose up --build
+
+# Access the application:
+# - Main app: http://localhost:5000
+# - Directus CMS: http://localhost:8055 (admin@admin.com / admin123)
 ```
 
-3. **Access the application:**
-- Main app: http://localhost:5000
-- Directus CMS: http://localhost:8055 (admin@example.com / admin123)
+### Method 2: Hybrid Deployment (Recommended for Development)
 
-4. **Stop the application:**
+**Flask app locally, database services in Docker:**
+
 ```bash
-docker-compose down
+# 1. Set up Python environment
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r app/requirements.txt
+
+# 2. Set environment variables
+.\setup-env.ps1
+
+# 3. Start database services only
+docker-compose up -d postgres directus
+
+# 4. Run Flask app locally
+python app/app.py
+
+# Access: http://localhost:5000
 ```
 
-## Production Deployment
+## Database Management
 
-### 1. Environment Variables
+### Initialize Database
+```bash
+# From project root
+python -m db_mng.init_db
+```
 
-Create a `.env` file in the project root:
+### Reset Database
+```bash
+# From project root
+python -m db_mng.reset_db
+```
+
+### Create Sample Data
+```bash
+# From project root
+python -m db_mng.create_sample_excel
+```
+
+## Environment Variables
+
+Create a `.env` file or use `setup-env.ps1`:
 
 ```env
-# Database Configuration
-DATABASE_URL=postgresql://directus:directus@postgres:5432/directus
-
-# Directus Configuration
-DIRECTUS_URL=http://directus:8055
-DIRECTUS_TOKEN=your_directus_token_here
-
-# Flask Configuration
-SECRET_KEY=your_secure_secret_key_here
-FLASK_ENV=production
-
-# Optional: Custom ports
-FLASK_PORT=5000
-DIRECTUS_PORT=8055
-POSTGRES_PORT=5432
+DATABASE_URL=postgresql://directus:directus@localhost:5432/directus
+DIRECTUS_URL=http://localhost:8055
+FLASK_ENV=development
+SECRET_KEY=your-secret-key
 ```
 
-### 2. Production Docker Compose
+## Features
 
-Create `docker-compose.prod.yml`:
+- **Hierarchical Requirements Management**: Organize requirements in groups with parent-child relationships
+- **Excel Import/Export**: Upload Excel files and export requirements
+- **Change Tracking**: Track all changes to requirements with history
+- **Directus Integration**: Headless CMS for content management
+- **RESTful API**: Full API for programmatic access
+- **Responsive UI**: Modern web interface
 
-```yaml
-services:
-  # Flask Application
-  flask-app:
-    build: .
-    ports:
-      - "80:5000"  # Expose on port 80
-    environment:
-      - FLASK_ENV=production
-      - DATABASE_URL=${DATABASE_URL}
-      - DIRECTUS_URL=${DIRECTUS_URL}
-      - DIRECTUS_TOKEN=${DIRECTUS_TOKEN}
-      - SECRET_KEY=${SECRET_KEY}
-    volumes:
-      - ./uploads:/app/uploads
-    depends_on:
-      - postgres
-      - directus
-      - db-init
-    networks:
-      - req-mng-network
-    restart: unless-stopped
+## Development
 
-  # Database initialization
-  db-init:
-    build: .
-    command: python init_db.py
-    environment:
-      - DATABASE_URL=${DATABASE_URL}
-    depends_on:
-      - postgres
-    networks:
-      - req-mng-network
+### Local Development Setup
+1. Use Method 2 (Hybrid Deployment)
+2. Make changes to files in `app/` directory
+3. Flask app auto-reloads on file changes
+4. Database changes require running init/reset scripts
 
-  # Directus CMS
-  directus:
-    image: directus/directus:latest
-    ports:
-      - "8055:8055"
-    environment:
-      - KEY=255d861b-5ea1-5996-9aa3-922530ec40b1
-      - SECRET=6116487b-cda1-52c2-b5b5-c8022c45e263
-      - DB_CLIENT=pg
-      - DB_HOST=postgres
-      - DB_PORT=5432
-      - DB_DATABASE=directus
-      - DB_USER=directus
-      - DB_PASSWORD=directus
-      - ADMIN_EMAIL=admin@example.com
-      - ADMIN_PASSWORD=admin123
-      - CORS_ENABLED=true
-      - CORS_ORIGIN=http://localhost:5000
-    depends_on:
-      - postgres
-    networks:
-      - req-mng-network
-    restart: unless-stopped
-
-  # PostgreSQL Database
-  postgres:
-    image: postgres:13-alpine
-    environment:
-      - POSTGRES_DB=directus
-      - POSTGRES_USER=directus
-      - POSTGRES_PASSWORD=directus
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    networks:
-      - req-mng-network
-    restart: unless-stopped
-
-volumes:
-  postgres_data:
-
-networks:
-  req-mng-network:
-    driver: bridge
-```
-
-### 3. Deploy to Production
-
-```bash
-# Start production deployment
-docker-compose -f docker-compose.prod.yml up -d
-
-# View logs
-docker-compose -f docker-compose.prod.yml logs -f
-
-# Stop production deployment
-docker-compose -f docker-compose.prod.yml down
-```
-
-## Cloud Deployment Options
-
-### AWS Deployment
-
-1. **EC2 Instance:**
-```bash
-# Install Docker on EC2
-sudo yum update -y
-sudo yum install -y docker
-sudo service docker start
-sudo usermod -a -G docker ec2-user
-
-# Install Docker Compose
-sudo curl -L "https://github.com/docker/compose/releases/latest/download/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
-sudo chmod +x /usr/local/bin/docker-compose
-
-# Clone and deploy
-git clone <your-repo>
-cd req_mng_tool
-docker-compose up -d
-```
-
-2. **AWS ECS (Elastic Container Service):**
-- Create ECS cluster
-- Define task definitions for each service
-- Set up Application Load Balancer
-- Configure environment variables
-
-### Google Cloud Platform
-
-1. **Google Compute Engine:**
-```bash
-# Similar to AWS EC2 setup
-sudo apt-get update
-sudo apt-get install docker.io
-sudo systemctl start docker
-sudo systemctl enable docker
-```
-
-2. **Google Cloud Run:**
-- Build and push Docker images to Container Registry
-- Deploy each service separately
-- Set up Cloud SQL for PostgreSQL
-
-### Azure Deployment
-
-1. **Azure Container Instances:**
-```bash
-# Deploy using Azure CLI
-az container create --resource-group myResourceGroup --name req-mng-app --image your-registry.azurecr.io/flask-app:latest
-```
-
-2. **Azure Kubernetes Service (AKS):**
-- Create AKS cluster
-- Deploy using Kubernetes manifests
-- Set up Azure Database for PostgreSQL
-
-## Monitoring and Maintenance
-
-### Health Checks
-
-The application includes health check endpoints:
-- Flask app: `GET /api/health`
-- Docker health checks configured in Dockerfile
-
-### Logs
-
-```bash
-# View application logs
-docker-compose logs flask-app
-
-# View all logs
-docker-compose logs -f
-
-# View specific service logs
-docker-compose logs directus
-```
-
-### Database Backup
-
-```bash
-# Backup PostgreSQL data
-docker-compose exec postgres pg_dump -U directus directus > backup.sql
-
-# Restore from backup
-docker-compose exec -T postgres psql -U directus directus < backup.sql
-```
-
-### Updates
-
-```bash
-# Pull latest changes
-git pull origin main
-
-# Rebuild and restart
-docker-compose down
-docker-compose up --build -d
-```
+### File Structure
+- **`app/`**: Main application code and templates
+- **`db_mng/`**: Database management and utility scripts
+- **Root**: Configuration and orchestration files
 
 ## Troubleshooting
 
 ### Common Issues
+1. **Import errors**: Make sure you're running from project root
+2. **Database connection**: Ensure PostgreSQL container is running
+3. **Port conflicts**: Check if ports 5000, 8055, 5432 are available
 
-1. **Port conflicts:**
-   - Change ports in docker-compose.yml
-   - Check if ports 5000, 8055, 5432 are available
-
-2. **Database connection issues:**
-   - Ensure PostgreSQL is running
-   - Check DATABASE_URL environment variable
-   - Verify network connectivity
-
-3. **Permission issues:**
-   - Ensure uploads directory has proper permissions
-   - Check Docker user permissions
-
-4. **Memory issues:**
-   - Increase Docker memory allocation
-   - Monitor resource usage
-
-### Debug Mode
-
+### Reset Everything
 ```bash
-# Run with debug output
-docker-compose up --build --verbose
-
-# Access container shell
-docker-compose exec flask-app bash
+docker-compose down -v
+docker-compose up --build
 ```
-
-## Security Considerations
-
-1. **Change default passwords:**
-   - Update Directus admin password
-   - Use strong SECRET_KEY
-   - Change database passwords
-
-2. **Network security:**
-   - Use reverse proxy (nginx)
-   - Enable HTTPS
-   - Configure firewall rules
-
-3. **Data protection:**
-   - Regular backups
-   - Encrypt sensitive data
-   - Monitor access logs 

@@ -16,10 +16,6 @@ class Config:
     # File upload configuration
     UPLOAD_FOLDER = 'uploads'
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB
-    ALLOWED_EXTENSIONS = {'xlsx', 'xls'}
-    
-    # Pagination
-    ITEMS_PER_PAGE = 50
 
 class DevelopmentConfig(Config):
     """Development configuration"""

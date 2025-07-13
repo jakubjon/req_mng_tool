@@ -3,13 +3,9 @@ from flask_cors import CORS
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
-import requests
-import json
 from datetime import datetime
 import uuid
 from dotenv import load_dotenv
-import io
-import base64
 from models import db, Requirement, CellHistory, Group, ExcelUpload
 from config import config
 

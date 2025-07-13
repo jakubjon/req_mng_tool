@@ -1,14 +1,16 @@
 services:
   # Flask Application
   flask-app:
-    build: .
+    build:
+      context: .
+      dockerfile: app/Dockerfile
     ports:
       - "5000:5000"
     environment:
       - FLASK_ENV=development
       - DATABASE_URL=postgresql://directus:directus@postgres:5432/directus
       - DIRECTUS_URL=http://directus:8055
-      - DIRECTUS_TOKEN=${DIRECTUS_TOKEN}
+      - DIRECTUS_TOKEN=
     volumes:
       - ./uploads:/app/uploads
     depends_on:
@@ -20,8 +22,10 @@ services:
 
   # Database initialization
   db-init:
-    build: .
-    command: python init_db.py
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    command: python -m db_mng.init_db
     environment:
       - DATABASE_URL=postgresql://directus:directus@postgres:5432/directus
     depends_on:
