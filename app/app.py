@@ -6,8 +6,9 @@ import pandas as pd
 from datetime import datetime
 import uuid
 from dotenv import load_dotenv
-from models import db, Requirement, CellHistory, Group, ExcelUpload
-from config import config
+from app.db import db
+from app.models import Requirement, CellHistory, Group
+from app.config import config
 
 # Load environment variables
 load_dotenv()
@@ -127,29 +128,50 @@ def update_group(group_id):
         db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
+@app.route('/api/groups/<group_id>', methods=['DELETE'])
+def delete_group(group_id):
+    """Delete a group"""
+    try:
+        group = Group.query.get(group_id)
+        if not group:
+            return jsonify({'success': False, 'error': 'Group not found'}), 404
+        
+        # Check if group has requirements
+        if group.requirements.count() > 0:
+            return jsonify({'success': False, 'error': 'Cannot delete group with requirements. Please move or delete all requirements first.'}), 400
+        
+        # Check if group has children
+        if group.children.count() > 0:
+            return jsonify({'success': False, 'error': 'Cannot delete group with child groups. Please move or delete all child groups first.'}), 400
+        
+        db.session.delete(group)
+        db.session.commit()
+        
+        return jsonify({'success': True, 'message': 'Group deleted successfully'})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
 @app.route('/api/requirements', methods=['GET'])
 def get_requirements():
     """Get all requirements with optional filtering"""
     try:
         # Query parameters for filtering
         status = request.args.get('status')
-        category = request.args.get('category')
+        chapter = request.args.get('chapter')
         group_id = request.args.get('group_id')
         parent_id = request.args.get('parent_id')
-        priority = request.args.get('priority')
         
         query = Requirement.query
         
         if status:
             query = query.filter(Requirement.status == status)
-        if category:
-            query = query.filter(Requirement.category == category)
+        if chapter:
+            query = query.filter(Requirement.chapter == chapter)
         if group_id:
             query = query.filter(Requirement.group_id == group_id)
         if parent_id:
             query = query.filter(Requirement.parent_id == parent_id)
-        if priority:
-            query = query.filter(Requirement.priority == priority)
         
         requirements = query.all()
         
@@ -198,7 +220,7 @@ def update_requirement(requirement_id):
         if 'group_id' in data and not data['group_id']:
             return jsonify({'success': False, 'error': 'Group is required'}), 400
         # Track changes for each field
-        fields_to_track = ['title', 'description', 'status', 'priority', 'category', 'parent_id']
+        fields_to_track = ['title', 'description', 'status', 'chapter', 'parent_id']
         for field in fields_to_track:
             if field in data and getattr(requirement, field) != data[field]:
                 # Record the change
@@ -246,8 +268,7 @@ def create_requirement():
             title=data['title'],
             description=data.get('description', ''),
             status=data.get('status', 'Draft'),
-            priority=data.get('priority', 'Medium'),
-            category=data.get('category', ''),
+            chapter=data.get('chapter'),
             group_id=group_id,
             parent_id=data.get('parent_id'),
             created_by=current_user,
@@ -325,8 +346,6 @@ def upload_excel():
                         title=str(row.get('Title', '')),
                         description=str(row.get('Description', '')),
                         status=str(row.get('Status', 'Draft')),
-                        priority=str(row.get('Priority', 'Medium')),
-                        category=str(row.get('Category', '')),
                         group_id=group.id,
                         parent_id=None,
                         created_by=current_user,
@@ -354,8 +373,6 @@ def upload_excel():
                             title=str(row.get('Title', '')),
                             description=str(row.get('Description', '')),
                             status=str(row.get('Status', 'Draft')),
-                            priority=str(row.get('Priority', 'Medium')),
-                            category=str(row.get('Category', '')),
                             group_id=group.id,
                             parent_id=requirement_id_mapping[parent_requirement_id],
                             created_by=current_user,
@@ -402,9 +419,7 @@ def export_excel():
                 'Requirement ID': req.requirement_id,
                 'Title': req.title,
                 'Description': req.description,
-                'Priority': req.priority,
                 'Status': req.status,
-                'Category': req.category,
                 'Group': req.group_obj.name if req.group_obj else 'Default',
                 'Parent ID': req.parent.requirement_id if req.parent else '',
                 'Created At': req.created_at,
@@ -436,40 +451,122 @@ def health_check():
 
 @app.route('/api/requirements/<requirement_id>/move', methods=['POST'])
 def move_requirement(requirement_id):
-    """Move a requirement to a different group (parent-child links persist)"""
+    """Move a requirement to a different group"""
     try:
         requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
         if not requirement:
             return jsonify({'success': False, 'error': 'Requirement not found'}), 404
         
         data = request.json
-        new_group_id = data.get('group_id')
+        new_group_id = data.get('new_group_id')
+        
         if not new_group_id:
-            return jsonify({'success': False, 'error': 'Group ID is required'}), 400
+            return jsonify({'success': False, 'error': 'New group ID is required'}), 400
         
-        current_user = get_current_user()
-        old_group_id = requirement.group_id
+        # Check if new group exists
+        new_group = Group.query.get(new_group_id)
+        if not new_group:
+            return jsonify({'success': False, 'error': 'New group not found'}), 404
         
-        # Record the change
+        # Update requirement
+        requirement.group_id = new_group_id
+        requirement.parent_id = None  # Remove parent relationship when moving
+        requirement.updated_at = datetime.utcnow()
+        
+        # Add to history
         history = CellHistory(
             requirement_id=requirement.id,
             field_name='group_id',
-            old_value=old_group_id,
-            new_value=new_group_id,
-            changed_by=current_user
+            old_value=str(requirement.group_id) if requirement.group_id else None,
+            new_value=str(new_group_id),
+            changed_by=get_current_user()
         )
         db.session.add(history)
-        
-        # Update the requirement's group only
-        requirement.group_id = new_group_id
-        requirement.updated_by = current_user
-        requirement.updated_at = datetime.utcnow()
         
         db.session.commit()
         
         return jsonify({
             'success': True,
-            'message': f'Requirement moved to new group'
+            'message': 'Requirement moved successfully',
+            'data': requirement.to_dict()
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/requirements/batch-update', methods=['POST'])
+def batch_update_requirements():
+    """Batch update multiple requirements"""
+    try:
+        data = request.json
+        requirement_ids = data.get('requirement_ids', [])
+        updates = data.get('updates', {})
+        
+        if not requirement_ids:
+            return jsonify({'success': False, 'error': 'No requirement IDs provided'}), 400
+        
+        if not updates:
+            return jsonify({'success': False, 'error': 'No updates provided'}), 400
+        
+        # Validate updates
+        allowed_fields = {'status', 'chapter', 'group_id'}
+        invalid_fields = set(updates.keys()) - allowed_fields
+        if invalid_fields:
+            return jsonify({'success': False, 'error': f'Invalid fields: {", ".join(invalid_fields)}'}), 400
+        
+        # Check if group_id is valid if provided
+        if 'group_id' in updates and updates['group_id']:
+            group = Group.query.get(updates['group_id'])
+            if not group:
+                return jsonify({'success': False, 'error': 'Invalid group ID'}), 400
+        
+        # Update requirements
+        updated_count = 0
+        current_user = get_current_user()
+        
+        for req_id in requirement_ids:
+            requirement = Requirement.query.filter_by(requirement_id=req_id).first()
+            if requirement:
+                # Track changes for history
+                changes = []
+                
+                # Update fields
+                if 'status' in updates and updates['status']:
+                    if requirement.status != updates['status']:
+                        changes.append(('status', requirement.status, updates['status']))
+                        requirement.status = updates['status']
+                
+                if 'chapter' in updates:
+                    if requirement.chapter != updates['chapter']:
+                        changes.append(('chapter', requirement.chapter, updates['chapter']))
+                        requirement.chapter = updates['chapter']
+                
+                if 'group_id' in updates and updates['group_id']:
+                    if requirement.group_id != updates['group_id']:
+                        changes.append(('group_id', str(requirement.group_id) if requirement.group_id else None, str(updates['group_id'])))
+                        requirement.group_id = updates['group_id']
+                
+                requirement.updated_at = datetime.utcnow()
+                
+                # Add history entries for changes
+                for field_name, old_value, new_value in changes:
+                    history = CellHistory(
+                        requirement_id=requirement.id,
+                        field_name=field_name,
+                        old_value=old_value,
+                        new_value=new_value,
+                        changed_by=current_user
+                    )
+                    db.session.add(history)
+                
+                updated_count += 1
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': f'Successfully updated {updated_count} requirements',
+            'updated_count': updated_count
         })
     except Exception as e:
         db.session.rollback()

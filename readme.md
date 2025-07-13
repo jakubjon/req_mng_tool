@@ -44,7 +44,7 @@ docker-compose up --build
 
 ```bash
 # 1. Set up Python environment
-python -m venv venv
+python3.11 -m venv venv
 .\venv\Scripts\Activate.ps1
 pip install -r app/requirements.txt
 
@@ -55,7 +55,7 @@ pip install -r app/requirements.txt
 docker-compose up -d postgres directus
 
 # 4. Run Flask app locally
-python app/app.py
+python -m app.app
 
 # Access: http://localhost:5000
 ```

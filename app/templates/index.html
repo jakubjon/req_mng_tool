@@ -37,9 +37,6 @@
         .status-badge {
             font-size: 0.75rem;
         }
-        .priority-high { background-color: #dc3545; }
-        .priority-medium { background-color: #ffc107; }
-        .priority-low { background-color: #28a745; }
         .upload-area {
             border: 2px dashed #dee2e6;
             border-radius: 0.5rem;
@@ -108,6 +105,18 @@
         .group-expand-btn.expanded {
             transform: rotate(90deg);
         }
+        .group-actions {
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .group-node:hover .group-actions {
+            opacity: 1;
+        }
+        .group-actions .btn {
+            padding: 0.25rem 0.5rem;
+            font-size: 0.75rem;
+        }
+
     </style>
 </head>
 <body>
@@ -130,18 +139,6 @@
                             </a>
                         </li>
                     </ul>
-                    <div class="mt-4">
-                        <div class="card bg-light">
-                            <div class="card-header p-2">
-                                <h6 class="mb-0"><i class="fas fa-sitemap me-2"></i>Group Hierarchy</h6>
-                            </div>
-                            <div class="card-body p-2">
-                                <div id="group-tree" class="group-tree">
-                                    <!-- Group hierarchy will be loaded here -->
-                                </div>
-                            </div>
-                        </div>
-                    </div>
                 </div>
             </div>
 
@@ -185,9 +182,9 @@
                         <div class="col-md-3 mb-3">
                             <div class="card text-center">
                                 <div class="card-body">
-                                    <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
-                                    <h5 class="card-title" id="high-priority">0</h5>
-                                    <p class="card-text">High Priority</p>
+                                    <i class="fas fa-clock fa-2x text-info mb-2"></i>
+                                    <h5 class="card-title" id="in-progress-requirements">0</h5>
+                                    <p class="card-text">In Progress</p>
                                 </div>
                             </div>
                         </div>
@@ -206,7 +203,7 @@
                                 <button class="btn btn-primary me-2" onclick="showAddRequirementModal()">
                                     <i class="fas fa-plus me-2"></i>Add Requirement
                                 </button>
-                                <button class="btn btn-secondary me-2" onclick="triggerExcelUpload()">
+                                <button class="btn btn-secondary me-2" onclick="showExcelUploadModal()">
                                     <i class="fas fa-upload me-2"></i>Upload Excel
                                 </button>
                                 <button class="btn btn-primary" onclick="exportRequirements()">
@@ -225,19 +222,56 @@
                                 <div class="col-md-4">
                                     <input type="text" class="form-control" id="search-input" placeholder="Search requirements...">
                                 </div>
+                                <div class="col-md-3">
+                                    <select class="form-select" id="status-filter">
+                                        <option value="">All Status</option>
+                                        <option value="Draft">Draft</option>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="Review">Review</option>
+                                        <option value="Completed">Completed</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-select" id="chapter-filter">
+                                        <option value="">All Chapters</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-2">
+                                    <select class="form-select" id="group-filter">
+                                        <option value="">All Groups</option>
+                                    </select>
+                                </div>
+                                <div class="col-md-3">
+                                    <button class="btn btn-outline-secondary" onclick="clearFilters()">
+                                        <i class="fas fa-times me-1"></i>Clear
+                                    </button>
+                                </div>
                             </div>
 
                             <!-- Requirements Table -->
                             <div class="card">
+                                <div class="card-header d-flex justify-content-between align-items-center">
+                                    <h6 class="mb-0">Requirements</h6>
+                                    <div>
+                                        <button class="btn btn-warning btn-sm" id="batch-edit-btn" onclick="showBatchEditModal()" style="display: none;">
+                                            <i class="fas fa-edit me-1"></i>Batch Edit (<span id="selected-count">0</span>)
+                                        </button>
+                                    </div>
+                                </div>
                                 <div class="card-body">
                                     <div class="table-responsive">
                                         <table class="table table-hover">
                                             <thead>
                                                 <tr>
+                                                    <th>
+                                                        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()">
+                                                    </th>
                                                     <th>ID</th>
                                                     <th>Title</th>
                                                     <th>Description</th>
                                                     <th>Status</th>
+                                                    <th>Chapter</th>
+                                                    <th>Group</th>
                                                     <th>Children</th>
                                                     <th>Updated</th>
                                                     <th>Actions</th>
@@ -285,7 +319,7 @@
                                         <h6>Expected Excel Format:</h6>
                                         <ul class="text-muted">
                                             <li><strong>Required:</strong> Requirement ID, Title</li>
-                                            <li><strong>Optional:</strong> Description, Priority, Status, Category, Parent ID</li>
+                                            <li><strong>Optional:</strong> Description, Status, Parent ID</li>
                                         </ul>
                                     </div>
                                 </div>
@@ -383,6 +417,12 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
+                                    <label class="form-label">Chapter</label>
+                                    <input type="text" class="form-control" id="chapter-field">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
                                     <label class="form-label">Group</label>
                                     <select class="form-select" id="req-group-id" required>
                                         <option value="">Select a group</option>
@@ -476,6 +516,114 @@
                             </div>
                         </div>
                     </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Edit Modal -->
+    <div class="modal fade" id="batchEditModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Batch Edit Requirements</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-info">
+                        <i class="fas fa-info-circle me-2"></i>
+                        <strong>Batch Edit:</strong> You have selected <span id="batch-selected-count">0</span> requirements. 
+                        Leave fields empty to keep current values unchanged.
+                    </div>
+                    <form id="batch-edit-form">
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Status</label>
+                                    <select class="form-select" id="batch-status">
+                                        <option value="">Keep Current</option>
+                                        <option value="Draft">Draft</option>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="Review">Review</option>
+                                        <option value="Completed">Completed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Chapter</label>
+                                    <input type="text" class="form-control" id="batch-chapter" placeholder="Leave empty to keep current">
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Group</label>
+                                    <select class="form-select" id="batch-group-id">
+                                        <option value="">Keep Current</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mt-3">
+                            <h6>Selected Requirements:</h6>
+                            <div id="batch-selected-list" class="border rounded p-2" style="max-height: 200px; overflow-y: auto;">
+                                <!-- Selected requirements will be listed here -->
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" onclick="saveBatchEdit()">Update Selected</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Excel Upload Modal -->
+    <div class="modal fade" id="excelUploadModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Upload Requirements from Excel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="mb-3">
+                        <div id="excel-upload-area" class="upload-area" style="cursor:pointer;">
+                            <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                            <h5>Drag and drop Excel file here</h5>
+                            <p class="text-muted">or click to browse</p>
+                            <input type="file" id="excel-upload-file" accept=".xlsx,.xls" style="display: none;">
+                            <button class="btn btn-primary" type="button" onclick="document.getElementById('excel-upload-file').click()">
+                                Choose File
+                            </button>
+                            <div id="excel-upload-filename" class="mt-2 small text-muted"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label">Select Group</label>
+                        <div class="input-group">
+                            <select class="form-select" id="excel-upload-group">
+                                <option value="">Select a group</option>
+                            </select>
+                            <button class="btn btn-outline-success" type="button" onclick="showAddGroupInline()">
+                                <i class="fas fa-plus"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="add-group-inline" class="mb-3" style="display:none;">
+                        <input type="text" class="form-control mb-2" id="new-group-name" placeholder="New group name">
+                        <button class="btn btn-success btn-sm" type="button" onclick="addGroupInline()">Create Group</button>
+                        <button class="btn btn-link btn-sm" type="button" onclick="hideAddGroupInline()">Cancel</button>
+                    </div>
+                    <div class="alert alert-info mt-3">
+                        <strong>Excel format:</strong> Required columns: <code>Requirement ID</code>, <code>Title</code>. Optional: <code>Description</code>, <code>Status</code>, <code>Parent ID</code>.
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="handleExcelUploadModal()">Upload</button>
                 </div>
             </div>
         </div>

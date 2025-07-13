@@ -1,14 +1,14 @@
 // Global variables
 let currentRequirementId = null;
-let currentGroupId = null;
 let requirementsData = [];
 let groupsData = [];
+let selectedRequirements = new Set(); // Track selected requirements for batch editing
 
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     loadDashboard();
     setupEventListeners();
-    // Populate upload group dropdown
+    loadGroups(); // Ensure groupsData is loaded on page load
     loadUploadGroupOptions();
 });
 
@@ -43,6 +43,9 @@ function setupEventListeners() {
     
     // Search and filters
     document.getElementById('search-input').addEventListener('input', filterRequirements);
+    document.getElementById('status-filter').addEventListener('change', filterRequirements);
+    document.getElementById('chapter-filter').addEventListener('change', filterRequirements);
+    document.getElementById('group-filter').addEventListener('change', filterRequirements);
 }
 
 // Navigation functions
@@ -93,8 +96,10 @@ async function loadDashboard() {
                 requirements.filter(r => r.status === 'Draft').length;
             document.getElementById('completed-requirements').textContent = 
                 requirements.filter(r => r.status === 'Completed').length;
-            document.getElementById('high-priority').textContent = 
-                requirements.filter(r => r.priority === 'High').length;
+            document.getElementById('in-progress-requirements').textContent = 
+                requirements.filter(r => r.status === 'In Progress').length;
+            
+
         }
     } catch (error) {
         console.error('Error loading dashboard:', error);
@@ -110,71 +115,13 @@ async function loadGroups() {
         
         if (data.success) {
             groupsData = data.data;
-            renderGroupTree(groupsData);
             loadGroupOptions();
+            populateGroupFilter(); // Ensure group filter is populated after groupsData is set
         }
     } catch (error) {
         console.error('Error loading groups:', error);
         showAlert('Error loading groups', 'danger');
     }
-}
-
-function renderGroupTree(groups) {
-    const treeContainer = document.getElementById('group-tree');
-    
-    function buildGroupHtml(groupList, level = 0) {
-        return groupList.map(group => `
-            <div class="group-node" data-group-id="${group.id}" onclick="selectGroup('${group.id}')">
-                <div class="d-flex align-items-center">
-                    ${group.children && group.children.length > 0 ? 
-                        `<i class="fas fa-chevron-right group-expand-btn" onclick="toggleGroupExpansion(event, '${group.id}')"></i>` : 
-                        '<i class="fas fa-folder me-2"></i>'
-                    }
-                    <div class="flex-grow-1">
-                        <div class="group-name">${group.name}</div>
-                        <div class="group-count">${group.requirements_count} requirements</div>
-                    </div>
-                </div>
-                ${group.children && group.children.length > 0 ? 
-                    `<div class="group-children" id="group-children-${group.id}" style="display: none;">
-                        ${buildGroupHtml(group.children, level + 1)}
-                    </div>` : ''
-                }
-            </div>
-        `).join('');
-    }
-    
-    treeContainer.innerHTML = buildGroupHtml(groups);
-}
-
-function toggleGroupExpansion(event, groupId) {
-    event.stopPropagation();
-    const btn = event.target;
-    const children = document.getElementById(`group-children-${groupId}`);
-    
-    if (children.style.display === 'none') {
-        children.style.display = 'block';
-        btn.classList.add('expanded');
-    } else {
-        children.style.display = 'none';
-        btn.classList.remove('expanded');
-    }
-}
-
-function selectGroup(groupId) {
-    // Remove previous selection
-    document.querySelectorAll('.group-node').forEach(node => {
-        node.classList.remove('selected');
-    });
-    
-    // Add selection to clicked group
-    const selectedNode = document.querySelector(`[data-group-id="${groupId}"]`);
-    if (selectedNode) {
-        selectedNode.classList.add('selected');
-    }
-    
-    currentGroupId = groupId;
-    loadRequirements(groupId);
 }
 
 function loadGroupOptions() {
@@ -205,7 +152,50 @@ function loadGroupOptions() {
 function showAddGroupModal() {
     document.getElementById('group-modal-title').textContent = 'Add Group';
     document.getElementById('group-form').reset();
+    // Clear any edit state
+    document.getElementById('groupModal').removeAttribute('data-edit-group-id');
     loadGroupOptions();
+    
+    const modal = new bootstrap.Modal(document.getElementById('groupModal'));
+    modal.show();
+}
+
+function editGroup(groupId) {
+    // Find the group in the groupsData
+    function findGroup(groups, id) {
+        for (let group of groups) {
+            if (group.id === id) {
+                return group;
+            }
+            if (group.children && group.children.length > 0) {
+                const found = findGroup(group.children, id);
+                if (found) return found;
+            }
+        }
+        return null;
+    }
+    
+    const group = findGroup(groupsData, groupId);
+    if (!group) {
+        showAlert('Group not found', 'danger');
+        return;
+    }
+    
+    // Set modal title and populate form
+    document.getElementById('group-modal-title').textContent = 'Edit Group';
+    document.getElementById('group-name').value = group.name;
+    document.getElementById('group-description').value = group.description || '';
+    
+    // Load group options and set parent
+    loadGroupOptions();
+    if (group.parent_id) {
+        document.getElementById('group-parent-id').value = group.parent_id;
+    } else {
+        document.getElementById('group-parent-id').value = '';
+    }
+    
+    // Store the group ID for editing
+    document.getElementById('groupModal').setAttribute('data-edit-group-id', groupId);
     
     const modal = new bootstrap.Modal(document.getElementById('groupModal'));
     modal.show();
@@ -218,9 +208,15 @@ async function saveGroup() {
         parent_id: document.getElementById('group-parent-id').value || null
     };
     
+    const editGroupId = document.getElementById('groupModal').getAttribute('data-edit-group-id');
+    const isEditing = editGroupId !== null;
+    
     try {
-        const response = await fetch('/api/groups', {
-            method: 'POST',
+        const url = isEditing ? `/api/groups/${editGroupId}` : '/api/groups';
+        const method = isEditing ? 'PUT' : 'POST';
+        
+        const response = await fetch(url, {
+            method: method,
             headers: {
                 'Content-Type': 'application/json',
                 'X-User-ID': 'current_user'
@@ -231,15 +227,45 @@ async function saveGroup() {
         const data = await response.json();
         
         if (data.success) {
-            showAlert('Group created successfully', 'success');
+            showAlert(isEditing ? 'Group updated successfully' : 'Group created successfully', 'success');
             bootstrap.Modal.getInstance(document.getElementById('groupModal')).hide();
+            // Clear the edit group ID
+            document.getElementById('groupModal').removeAttribute('data-edit-group-id');
             loadGroups();
         } else {
-            showAlert(data.error || 'Error creating group', 'danger');
+            showAlert(data.error || (isEditing ? 'Error updating group' : 'Error creating group'), 'danger');
         }
     } catch (error) {
-        console.error('Error creating group:', error);
-        showAlert('Error creating group', 'danger');
+        console.error(isEditing ? 'Error updating group:' : 'Error creating group:', error);
+        showAlert(isEditing ? 'Error updating group' : 'Error creating group', 'danger');
+    }
+}
+
+async function deleteGroup(groupId) {
+    if (!confirm('Are you sure you want to delete this group? This action cannot be undone.')) {
+        return;
+    }
+    
+    try {
+        const response = await fetch(`/api/groups/${groupId}`, {
+            method: 'DELETE',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-ID': 'current_user'
+            }
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert('Group deleted successfully', 'success');
+            loadGroups();
+        } else {
+            showAlert(data.error || 'Error deleting group', 'danger');
+        }
+    } catch (error) {
+        console.error('Error deleting group:', error);
+        showAlert('Error deleting group', 'danger');
     }
 }
 
@@ -257,6 +283,8 @@ async function loadRequirements(groupId = null) {
         if (data.success) {
             requirementsData = data.data;
             renderRequirementsTable(requirementsData);
+            populateChapterFilter();
+            populateGroupFilter();
         }
     } catch (error) {
         console.error('Error loading requirements:', error);
@@ -272,10 +300,13 @@ function renderRequirementsTable(requirements) {
         row.className = 'requirement-row';
         row.onclick = () => showRequirementDetails(req.requirement_id);
         row.innerHTML = `
+            <td><input type="checkbox" class="form-check-input requirement-checkbox" value="${req.requirement_id}" ${selectedRequirements.has(req.requirement_id) ? 'checked' : ''} onchange="handleRequirementSelection(event, '${req.requirement_id}')" onclick="event.stopPropagation();"></td>
             <td>${req.requirement_id}</td>
             <td>${req.title}</td>
             <td>${req.description ? req.description : ''}</td>
-            <td>${req.status}</td>
+            <td><span class="badge bg-secondary">${req.status}</span></td>
+            <td>${req.chapter || '-'}</td>
+            <td>${req.group_name || '-'}</td>
             <td>${req.children_count}</td>
             <td>${formatDate(req.updated_at)}</td>
             <td>
@@ -285,19 +316,84 @@ function renderRequirementsTable(requirements) {
         `;
         tbody.appendChild(row);
     });
+    updateBatchEditButton();
 }
 
 function filterRequirements() {
     const searchTerm = document.getElementById('search-input').value.toLowerCase();
+    const statusFilter = document.getElementById('status-filter').value;
+    const chapterFilter = document.getElementById('chapter-filter').value;
+    const groupFilter = document.getElementById('group-filter').value;
+    
+    console.log('Filtering with:', { searchTerm, statusFilter, chapterFilter, groupFilter });
+    console.log('Sample requirement:', requirementsData[0]);
+    
     const filtered = requirementsData.filter(req => {
-        return (
+        // Text search
+        const matchesSearch = !searchTerm || 
             req.title.toLowerCase().includes(searchTerm) ||
             req.requirement_id.toLowerCase().includes(searchTerm) ||
-            (req.description && req.description.toLowerCase().includes(searchTerm))
-        );
+            (req.description && req.description.toLowerCase().includes(searchTerm));
+        
+        // Status filter
+        const matchesStatus = !statusFilter || req.status === statusFilter;
+        
+        // Chapter filter
+        const matchesChapter = !chapterFilter || req.chapter === chapterFilter;
+        
+        // Group filter (compare as strings)
+        const matchesGroup = !groupFilter || String(req.group_id) === String(groupFilter);
+        
+        console.log(`Requirement ${req.requirement_id}:`, {
+            group_id: req.group_id,
+            groupFilter,
+            matchesGroup,
+            matchesSearch,
+            matchesStatus,
+            matchesChapter
+        });
+        
+        return matchesSearch && matchesStatus && matchesChapter && matchesGroup;
     });
+    
+    console.log('Filtered results:', filtered.length);
     renderRequirementsTable(filtered);
+    populateGroupFilter(); // Ensure filter is up to date
 }
+
+function clearFilters() {
+    document.getElementById('search-input').value = '';
+    document.getElementById('status-filter').value = '';
+    document.getElementById('chapter-filter').value = '';
+    document.getElementById('group-filter').value = '';
+    filterRequirements();
+}
+
+// Add populateChapterFilter and populateGroupFilter
+function populateChapterFilter() {
+    const chapterSelect = document.getElementById('chapter-filter');
+    const chapters = [...new Set(requirementsData.map(req => req.chapter).filter(ch => ch))];
+    chapterSelect.innerHTML = '<option value="">All Chapters</option>';
+    chapters.forEach(chapter => {
+        const option = document.createElement('option');
+        option.value = chapter;
+        option.textContent = chapter;
+        chapterSelect.appendChild(option);
+    });
+}
+function populateGroupFilter() {
+    const groupSelect = document.getElementById('group-filter');
+    const groups = [...new Set(requirementsData.map(req => req.group_id).filter(gid => gid))];
+    groupSelect.innerHTML = '<option value="">All Groups</option>';
+    groups.forEach(gid => {
+        const group = groupsData.find(g => String(g.id) === String(gid));
+        const option = document.createElement('option');
+        option.value = gid;
+        option.textContent = group ? group.name : gid;
+        groupSelect.appendChild(option);
+    });
+}
+
 
 // Modal functions
 function showAddRequirementModal() {
@@ -308,9 +404,9 @@ function showAddRequirementModal() {
     loadParentOptions();
     loadGroupOptions();
     // Set group dropdown to currentGroupId
-    if (currentGroupId) {
-        document.getElementById('req-group-id').value = currentGroupId;
-    }
+    // if (currentGroupId) { // Removed as per edit hint
+    //     document.getElementById('req-group-id').value = currentGroupId;
+    // }
     const modal = new bootstrap.Modal(document.getElementById('requirementModal'));
     modal.show();
 }
@@ -365,7 +461,8 @@ async function saveRequirement() {
         title: document.getElementById('req-title').value,
         description: document.getElementById('req-description').value,
         status: document.getElementById('req-status').value,
-        parent_id: document.getElementById('parent-id').value || null
+        parent_id: document.getElementById('parent-id').value || null,
+        chapter: document.getElementById('chapter-field').value || null
     };
     const groupId = document.getElementById('req-group-id').value;
     if (groupId) {
@@ -393,7 +490,7 @@ async function saveRequirement() {
         if (data.success) {
             showAlert('Requirement saved successfully', 'success');
             bootstrap.Modal.getInstance(document.getElementById('requirementModal')).hide();
-            loadRequirements(currentGroupId);
+            loadRequirements(); // Changed from loadRequirements(currentGroupId)
         } else {
             showAlert(data.error || 'Error saving requirement', 'danger');
         }
@@ -421,15 +518,13 @@ async function showRequirementDetails(requirementId) {
                             <tr><td><strong>ID:</strong></td><td>${req.requirement_id}</td></tr>
                             <tr><td><strong>Title:</strong></td><td>${req.title}</td></tr>
                             <tr><td><strong>Description:</strong></td><td>${req.description || '-'}</td></tr>
-                            <tr><td><strong>Category:</strong></td><td>${req.category || '-'}</td></tr>
                             <tr><td><strong>Group:</strong></td><td><span class="badge bg-primary">${req.group_name || 'Default'}</span></td></tr>
                         </table>
                     </div>
                     <div class="col-md-6">
-                        <h6>Status & Priority</h6>
+                        <h6>Status & Timeline</h6>
                         <table class="table table-sm">
                             <tr><td><strong>Status:</strong></td><td><span class="badge bg-secondary">${req.status}</span></td></tr>
-                            <tr><td><strong>Priority:</strong></td><td><span class="badge priority-${req.priority.toLowerCase()}">${req.priority}</span></td></tr>
                             <tr><td><strong>Created:</strong></td><td>${formatDate(req.created_at)}</td></tr>
                             <tr><td><strong>Updated:</strong></td><td>${formatDate(req.updated_at)}</td></tr>
                         </table>
@@ -563,7 +658,7 @@ async function moveRequirement() {
         if (data.success) {
             showAlert(data.message, 'success');
             bootstrap.Modal.getInstance(document.getElementById('moveRequirementModal')).hide();
-            loadRequirements(currentGroupId);
+            loadRequirements(); // Changed from loadRequirements(currentGroupId)
             loadGroups(); // Refresh groups
         } else {
             showAlert(data.error || 'Error moving requirement', 'danger');
@@ -595,7 +690,7 @@ async function handleFileUpload() {
         const data = await response.json();
         if (data.success) {
             showAlert(`Successfully processed ${data.data.records_processed} requirements`, 'success');
-            loadRequirements(currentGroupId); // Refresh requirements list
+            loadRequirements(); // Refresh requirements list
         } else {
             showAlert(data.error || 'Error uploading file', 'danger');
         }
@@ -674,7 +769,7 @@ async function deleteRequirement(requirementId) {
         
         if (data.success) {
             showAlert('Requirement deleted successfully', 'success');
-            loadRequirements(currentGroupId);
+            loadRequirements(); // Changed from loadRequirements(currentGroupId)
         } else {
             showAlert(data.error || 'Error deleting requirement', 'danger');
         }
@@ -717,15 +812,287 @@ function triggerExcelUpload() {
 async function handleExcelFileChange() {
     const fileInput = document.getElementById('excel-file');
     const file = fileInput.files[0];
-    if (!file) return;
-    if (!currentGroupId) {
-        showAlert('Please select a group before uploading requirements.', 'warning');
+    
+    if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        const groupId = document.getElementById('upload-group-id').value;
+        if (groupId) {
+            formData.append('group_id', groupId);
+        }
+        
+        try {
+            const response = await fetch('/api/upload-excel', {
+                method: 'POST',
+                body: formData
+            });
+            
+            const data = await response.json();
+            
+            if (data.success) {
+                showAlert('Excel file uploaded successfully', 'success');
+                loadRequirements();
+                loadDashboard();
+            } else {
+                showAlert(data.error || 'Error uploading file', 'danger');
+            }
+        } catch (error) {
+            console.error('Error uploading file:', error);
+            showAlert('Error uploading file', 'danger');
+        }
+        
+        // Clear the file input
         fileInput.value = '';
+    }
+}
+
+// Batch editing functions
+function handleRequirementSelection(event, requirementId) {
+    event.stopPropagation();
+    
+    if (event.target.checked) {
+        selectedRequirements.add(requirementId);
+    } else {
+        selectedRequirements.delete(requirementId);
+    }
+    
+    updateBatchEditButton();
+}
+
+function toggleSelectAll() {
+    const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    const requirementCheckboxes = document.querySelectorAll('.requirement-checkbox');
+    
+    requirementCheckboxes.forEach(checkbox => {
+        checkbox.checked = selectAllCheckbox.checked;
+        if (selectAllCheckbox.checked) {
+            selectedRequirements.add(checkbox.value);
+        } else {
+            selectedRequirements.delete(checkbox.value);
+        }
+    });
+    
+    updateBatchEditButton();
+}
+
+function updateBatchEditButton() {
+    const batchEditBtn = document.getElementById('batch-edit-btn');
+    const selectedCount = document.getElementById('selected-count');
+    const count = selectedRequirements.size;
+    
+    selectedCount.textContent = count;
+    
+    if (count > 0) {
+        batchEditBtn.style.display = 'inline-block';
+    } else {
+        batchEditBtn.style.display = 'none';
+    }
+}
+
+function showBatchEditModal() {
+    const selectedCount = document.getElementById('batch-selected-count');
+    const selectedList = document.getElementById('batch-selected-list');
+    
+    selectedCount.textContent = selectedRequirements.size;
+    
+    // Populate selected requirements list
+    const selectedReqs = Array.from(selectedRequirements).map(id => {
+        const req = requirementsData.find(r => r.requirement_id === id);
+        return req ? `${req.requirement_id} - ${req.title}` : id;
+    });
+    
+    selectedList.innerHTML = selectedReqs.map(req => `<div class="small text-muted">${req}</div>`).join('');
+    
+    // Reset form
+    document.getElementById('batch-edit-form').reset();
+    
+    // Load group options
+    const batchGroupSelect = document.getElementById('batch-group-id');
+    batchGroupSelect.innerHTML = '<option value="">Keep Current</option>';
+    
+    function addGroupOptions(groups, level = 0) {
+        groups.forEach(group => {
+            const indent = '&nbsp;'.repeat(level * 4);
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.innerHTML = `${indent}${group.name}`;
+            batchGroupSelect.appendChild(option);
+            
+            if (group.children && group.children.length > 0) {
+                addGroupOptions(group.children, level + 1);
+            }
+        });
+    }
+    
+    addGroupOptions(groupsData);
+    
+    const modal = new bootstrap.Modal(document.getElementById('batchEditModal'));
+    modal.show();
+}
+
+async function saveBatchEdit() {
+    const status = document.getElementById('batch-status').value;
+    const chapter = document.getElementById('batch-chapter').value;
+    const groupId = document.getElementById('batch-group-id').value;
+    
+    // Prepare update data
+    const updateData = {};
+    if (status) updateData.status = status;
+    if (chapter !== '') updateData.chapter = chapter || null; // Allow empty string to clear chapter
+    if (groupId) updateData.group_id = groupId;
+    
+    if (Object.keys(updateData).length === 0) {
+        showAlert('Please select at least one field to update', 'warning');
         return;
     }
+    
+    try {
+        const response = await fetch('/api/requirements/batch-update', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'X-User-ID': 'current_user'
+            },
+            body: JSON.stringify({
+                requirement_ids: Array.from(selectedRequirements),
+                updates: updateData
+            })
+        });
+        
+        const data = await response.json();
+        
+        if (data.success) {
+            showAlert(`Successfully updated ${data.updated_count} requirements`, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('batchEditModal')).hide();
+            
+            // Clear selections
+            selectedRequirements.clear();
+            document.getElementById('select-all-checkbox').checked = false;
+            
+            // Reload data
+            loadRequirements(); // Changed from loadRequirements(currentGroupId)
+            loadDashboard();
+        } else {
+            showAlert(data.error || 'Error updating requirements', 'danger');
+        }
+    } catch (error) {
+        console.error('Error updating requirements:', error);
+        showAlert('Error updating requirements', 'danger');
+    }
+} 
+
+// Excel Upload Modal Logic
+function showExcelUploadModal() {
+    // Reset modal state
+    document.getElementById('excel-upload-file').value = '';
+    document.getElementById('excel-upload-filename').textContent = '';
+    document.getElementById('add-group-inline').style.display = 'none';
+    document.getElementById('new-group-name').value = '';
+    // Populate group dropdown
+    populateExcelUploadGroupDropdown();
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('excelUploadModal'));
+    modal.show();
+}
+
+function populateExcelUploadGroupDropdown() {
+    const groupSelect = document.getElementById('excel-upload-group');
+    groupSelect.innerHTML = '<option value="">Select a group</option>';
+    function addGroupOptions(groups, level = 0) {
+        groups.forEach(group => {
+            const indent = '\u00A0'.repeat(level * 4);
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.innerHTML = indent + group.name;
+            groupSelect.appendChild(option);
+            if (group.children && group.children.length > 0) {
+                addGroupOptions(group.children, level + 1);
+            }
+        });
+    }
+    addGroupOptions(groupsData);
+}
+
+// Drag-and-drop and file selection
+const excelUploadArea = document.getElementById('excel-upload-area');
+if (excelUploadArea) {
+    excelUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        excelUploadArea.style.borderColor = '#667eea';
+    });
+    excelUploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        excelUploadArea.style.borderColor = '#dee2e6';
+    });
+    excelUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        excelUploadArea.style.borderColor = '#dee2e6';
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            document.getElementById('excel-upload-file').files = files;
+            document.getElementById('excel-upload-filename').textContent = files[0].name;
+        }
+    });
+    document.getElementById('excel-upload-file').addEventListener('change', function() {
+        if (this.files.length > 0) {
+            document.getElementById('excel-upload-filename').textContent = this.files[0].name;
+        } else {
+            document.getElementById('excel-upload-filename').textContent = '';
+        }
+    });
+}
+
+function showAddGroupInline() {
+    document.getElementById('add-group-inline').style.display = 'block';
+    document.getElementById('new-group-name').focus();
+}
+function hideAddGroupInline() {
+    document.getElementById('add-group-inline').style.display = 'none';
+    document.getElementById('new-group-name').value = '';
+}
+async function addGroupInline() {
+    const name = document.getElementById('new-group-name').value.trim();
+    if (!name) {
+        showAlert('Group name cannot be empty', 'warning');
+        return;
+    }
+    try {
+        const response = await fetch('/api/groups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', 'X-User-ID': 'current_user' },
+            body: JSON.stringify({ name })
+        });
+        const data = await response.json();
+        if (data.success) {
+            showAlert('Group created successfully', 'success');
+            hideAddGroupInline();
+            await loadGroups(); // refresh groupsData
+            populateExcelUploadGroupDropdown();
+            document.getElementById('excel-upload-group').value = data.data.id;
+        } else {
+            showAlert(data.error || 'Error creating group', 'danger');
+        }
+    } catch (error) {
+        showAlert('Error creating group', 'danger');
+    }
+}
+
+async function handleExcelUploadModal() {
+    const fileInput = document.getElementById('excel-upload-file');
+    const groupId = document.getElementById('excel-upload-group').value;
+    if (!fileInput.files.length) {
+        showAlert('Please select an Excel file to upload.', 'warning');
+        return;
+    }
+    if (!groupId) {
+        showAlert('Please select a group for import.', 'warning');
+        return;
+    }
+    const file = fileInput.files[0];
     const formData = new FormData();
     formData.append('file', file);
-    formData.append('group_id', currentGroupId);
+    formData.append('group_id', groupId);
     try {
         const response = await fetch('/api/upload-excel', {
             method: 'POST',
@@ -733,14 +1100,16 @@ async function handleExcelFileChange() {
         });
         const data = await response.json();
         if (data.success) {
-            showAlert(`Successfully processed ${data.data.records_processed} requirements`, 'success');
-            loadRequirements(currentGroupId);
+            showAlert('Excel file uploaded successfully', 'success');
+            bootstrap.Modal.getInstance(document.getElementById('excelUploadModal')).hide();
+            loadRequirements();
+            loadDashboard();
         } else {
             showAlert(data.error || 'Error uploading file', 'danger');
         }
     } catch (error) {
-        console.error('Error uploading file:', error);
         showAlert('Error uploading file', 'danger');
     }
     fileInput.value = '';
+    document.getElementById('excel-upload-filename').textContent = '';
 } 

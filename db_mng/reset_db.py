@@ -1,11 +1,18 @@
-import os
-import sys
+#!/usr/bin/env python3
+"""
+Database reset script
+Drops all tables and recreates them
+"""
 
-# Add the parent directory to the path so we can import from app
+import sys
+import os
+
+# Add the parent directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, db
-from app.models import Requirement, CellHistory, Group, ExcelUpload
+from app.app import app
+from app.db import db
+from app.models import Requirement, CellHistory, Group
 
 def reset_database():
     """Drop and recreate all database tables"""
@@ -30,9 +37,8 @@ def reset_database():
             
             print("Tables created:")
             print("  - groups")
-            print("  - requirements (with priority and group_id)")
+            print("  - requirements (with group_id, chapter)")
             print("  - cell_history")
-            print("  - excel_uploads")
             
         except Exception as e:
             print(f"❌ Error resetting database: {e}")

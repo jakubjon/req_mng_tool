@@ -1,19 +1,18 @@
 #!/usr/bin/env python3
 """
-Database initialization script for Docker setup
+Database initialization script
+Creates all tables and adds sample data
 """
-import os
-import sys
-from dotenv import load_dotenv
 
-# Add the parent directory to the path so we can import from app
+import sys
+import os
+
+# Add the parent directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, db
-from app.models import Requirement, CellHistory, Group, ExcelUpload
-
-# Load environment variables
-load_dotenv()
+from app.app import app
+from app.db import db
+from app.models import Requirement, CellHistory, Group
 
 def init_database():
     """Initialize database tables"""
