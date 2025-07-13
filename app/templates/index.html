@@ -29,6 +29,53 @@
         }
         .table-responsive {
             border-radius: 0.5rem;
+            overflow-x: auto;
+            overflow-y: auto;
+            max-height: calc(100vh - 300px);
+            position: relative;
+        }
+        thead {
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            background-color: #fff;
+        }
+        thead th {
+            background-color: #fff;
+            border-bottom: 2px solid #dee2e6;
+        }
+        table {
+            min-width: 1200px;
+            table-layout: fixed;
+        }
+        th, td {
+            white-space: normal;
+            overflow: hidden;
+            word-wrap: break-word;
+            word-break: break-word;
+            min-width: 100px;
+            vertical-align: top;
+        }
+        .main-content {
+            height: 100vh;
+            overflow: hidden;
+        }
+        .section {
+            height: calc(100vh - 2rem);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        .card {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+        }
+        .card-body {
+            flex: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
         }
         .requirement-row {
             cursor: pointer;
@@ -119,7 +166,141 @@
             padding: 0.25rem 0.5rem;
             font-size: 0.75rem;
         }
-
+        .resize-handle {
+            display: inline-block;
+            width: 8px;
+            height: 100%;
+            cursor: col-resize;
+            position: absolute;
+            right: -4px;
+            top: 0;
+            z-index: 2;
+            background-color: transparent;
+            transition: background-color 0.2s;
+        }
+        .resize-handle:hover {
+            background-color: rgba(102, 126, 234, 0.3);
+        }
+        th { 
+            position: relative; 
+            min-width: 120px;
+        }
+        th:first-child {
+            min-width: 20px;
+            width: 20px;
+            max-width: 20px;
+        }
+        td:first-child {
+            width: 20px;
+            max-width: 20px;
+            padding: 2px !important;
+            text-align: center;
+        }
+        .requirement-checkbox {
+            margin: 0 !important;
+            padding: 0 !important;
+            width: 16px !important;
+            height: 16px !important;
+        }
+        th:nth-child(2) {
+            min-width: 80px;
+            width: 80px;
+        }
+        th:nth-child(3) {
+            min-width: 200px;
+            width: 200px;
+        }
+        th:nth-child(4) {
+            min-width: 300px;
+            width: 300px;
+        }
+        th:nth-child(5) {
+            min-width: 120px;
+            width: 120px;
+        }
+        th:nth-child(6) {
+            min-width: 120px;
+            width: 120px;
+        }
+        th:nth-child(7) {
+            min-width: 150px;
+            width: 150px;
+        }
+        th:nth-child(8) {
+            min-width: 100px;
+            width: 100px;
+        }
+        th:nth-child(9) {
+            min-width: 120px;
+            width: 120px;
+        }
+        th:nth-child(10) {
+            min-width: 120px;
+            width: 120px;
+        }
+        
+        /* Modal content styling */
+        .modal-body .detail-section {
+            margin-bottom: 1.5rem;
+        }
+        .modal-body .detail-section h6 {
+            margin-bottom: 0.75rem;
+            color: #495057;
+            font-weight: 600;
+        }
+        .modal-body .detail-item {
+            display: flex;
+            margin-bottom: 0.5rem;
+            align-items: flex-start;
+        }
+        .modal-body .detail-label {
+            flex: 0 0 120px;
+            font-weight: 600;
+            color: #495057;
+            padding-right: 1rem;
+        }
+        .modal-body .detail-value {
+            flex: 1;
+            word-wrap: break-word;
+            word-break: break-word;
+        }
+        .modal-body .detail-item-full {
+            margin-bottom: 0.5rem;
+        }
+        .modal-body .detail-value-full {
+            word-wrap: break-word;
+            word-break: break-word;
+            line-height: 1.5;
+        }
+        .modal-body .badge {
+            font-size: 0.75rem;
+        }
+        
+        /* Ensure modal content doesn't overflow */
+        .modal-xl {
+            max-width: 800px;
+        }
+        .modal-body {
+            max-height: 70vh;
+            overflow-y: auto;
+        }
+        .modal-body .row {
+            margin: 0;
+        }
+        .modal-body .col-md-6 {
+            padding: 0 10px;
+        }
+        
+        /* Fix tab switching */
+        .tab-pane {
+            display: none;
+        }
+        .tab-pane.active {
+            display: block;
+        }
+        .tab-pane.show {
+            display: block;
+        }
     </style>
 </head>
 <body>
@@ -142,23 +323,18 @@
                             </a>
                         </li>
                     </ul>
+                    <div class="mt-4 d-flex flex-column align-items-start">
+                        <span class="text-white-50 small">Active user:</span>
+                        <span id="current-user" class="fw-bold mb-2">Loading...</span>
+                        <button class="btn btn-outline-light btn-sm" onclick="logout()">
+                            <i class="fas fa-sign-out-alt me-1"></i>Logout
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <!-- Main Content -->
             <div class="col-md-9 col-lg-10 main-content p-4">
-                <!-- User Info and Logout -->
-                <div class="row mb-4">
-                    <div class="col-12 d-flex justify-content-between align-items-center">
-                        <div>
-                            <span class="text-muted">Welcome, </span>
-                            <span id="current-user" class="fw-bold">Loading...</span>
-                        </div>
-                        <button class="btn btn-outline-danger btn-sm" onclick="logout()">
-                            <i class="fas fa-sign-out-alt me-1"></i>Logout
-                        </button>
-                    </div>
-                </div>
                 
                 <!-- Dashboard Section -->
                 <div id="dashboard-section" class="section">
@@ -228,17 +404,17 @@
                             </div>
                         </div>
                     </div>
-                    <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none;" onchange="handleExcelFileChange()">
+
                     
                     <div class="row">
                         <!-- Requirements Content -->
-                        <div class="col-md-9">
+                        <!-- <div class="col-md-9"> -->
                             <!-- Filters -->
-                            <div class="row mb-3">
+                            <div class="row mb-3 g-2 align-items-end">
                                 <div class="col-md-4">
                                     <input type="text" class="form-control" id="search-input" placeholder="Search requirements...">
                                 </div>
-                                <div class="col-md-3">
+                                <div class="col-md-2">
                                     <select class="form-select" id="status-filter">
                                         <option value="">All Status</option>
                                         <option value="Draft">Draft</option>
@@ -257,40 +433,35 @@
                                         <option value="">All Groups</option>
                                     </select>
                                 </div>
-                                <div class="col-md-3">
-                                    <button class="btn btn-outline-secondary" onclick="clearFilters()">
+                                <div class="col-md-2">
+                                    <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
                                         <i class="fas fa-times me-1"></i>Clear
                                     </button>
                                 </div>
                             </div>
+                            <div class="mb-2">
+                                <button class="btn btn-warning btn-sm" id="batch-edit-btn" onclick="showBatchEditModal()" style="display: none;">
+                                    <i class="fas fa-edit me-1"></i>Batch Edit (<span id="selected-count">0</span>)
+                                </button>
+                            </div>
 
                             <!-- Requirements Table -->
-                            <div class="card">
-                                <div class="card-header d-flex justify-content-between align-items-center">
-                                    <h6 class="mb-0">Requirements</h6>
-                                    <div>
-                                        <button class="btn btn-warning btn-sm" id="batch-edit-btn" onclick="showBatchEditModal()" style="display: none;">
-                                            <i class="fas fa-edit me-1"></i>Batch Edit (<span id="selected-count">0</span>)
-                                        </button>
-                                    </div>
-                                </div>
-                                <div class="card-body">
-                                    <div class="table-responsive">
-                                        <table class="table table-hover">
+                            <div class="card flex-grow-1">
+                                <div class="card-body d-flex flex-column">
+                                    <div class="table-responsive flex-grow-1">
+                                        <table class="table table-hover" style="min-width:1200px;">
                                             <thead>
                                                 <tr>
-                                                    <th>
-                                                        <input type="checkbox" id="select-all-checkbox" onchange="toggleSelectAll()">
-                                                    </th>
-                                                    <th>ID</th>
-                                                    <th>Title</th>
-                                                    <th>Description</th>
-                                                    <th>Status</th>
-                                                    <th>Chapter</th>
-                                                    <th>Group</th>
-                                                    <th>Children</th>
-                                                    <th>Updated</th>
-                                                    <th>Actions</th>
+                                                    <th style="width: 20px; max-width: 20px;"></th>
+                                                    <th style="width: 80px;">ID <span class="resize-handle"></span></th>
+                                                    <th style="width: 200px;">Title <span class="resize-handle"></span></th>
+                                                    <th style="width: 300px;">Description <span class="resize-handle"></span></th>
+                                                    <th style="width: 120px;">Status <span class="resize-handle"></span></th>
+                                                    <th style="width: 120px;">Chapter <span class="resize-handle"></span></th>
+                                                    <th style="width: 150px;">Group <span class="resize-handle"></span></th>
+                                                    <th style="width: 100px;">Children <span class="resize-handle"></span></th>
+                                                    <th style="width: 120px;">Updated <span class="resize-handle"></span></th>
+                                                    <th style="width: 120px;">Actions <span class="resize-handle"></span></th>
                                                 </tr>
                                             </thead>
                                             <tbody id="requirements-table-body">
@@ -300,53 +471,11 @@
                                     </div>
                                 </div>
                             </div>
-                        </div>
+                        <!-- </div> -->
                     </div>
                 </div>
 
-                <!-- Upload Section -->
-                <div id="upload-section" class="section" style="display: none;">
-                    <div class="row mb-4">
-                        <div class="col-12">
-                            <h2><i class="fas fa-upload me-2"></i>Upload Excel File</h2>
-                        </div>
-                    </div>
-                    
-                    <div class="row">
-                        <div class="col-md-8">
-                            <div class="card">
-                                <div class="card-body">
-                                    <div class="upload-area" id="upload-area">
-                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
-                                        <h5>Drag and drop Excel file here</h5>
-                                        <p class="text-muted">or click to browse</p>
-                                        <input type="file" id="excel-file" accept=".xlsx,.xls" style="display: none;">
-                                        <button class="btn btn-primary" onclick="document.getElementById('excel-file').click()">
-                                            Choose File
-                                        </button>
-                                    </div>
-                                    <div class="mt-3">
-                                        <label class="form-label">Select Group for Imported Requirements</label>
-                                        <select class="form-select" id="upload-group-id">
-                                            <option value="">Select a group</option>
-                                        </select>
-                                    </div>
-                                    <div class="mt-3">
-                                        <h6>Expected Excel Format:</h6>
-                                        <ul class="text-muted">
-                                            <li><strong>Required:</strong> Requirement ID, Title</li>
-                                            <li><strong>Optional:</strong> Description, Status, Parent ID</li>
-                                        </ul>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="col-md-4">
-                            <!-- Upload history removed -->
-                        </div>
-                    </div>
-                </div>
+
             </div>
         </div>
     </div>

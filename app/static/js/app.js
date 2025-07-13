@@ -69,7 +69,55 @@ document.addEventListener('DOMContentLoaded', function() {
     setupEventListeners();
     loadGroups(); // Ensure groupsData is loaded on page load
     loadUploadGroupOptions();
+    enableTableColumnResizing();
 });
+
+function enableTableColumnResizing() {
+    const table = document.querySelector('table');
+    if (!table) return;
+    const ths = table.querySelectorAll('th');
+    let startX, startWidth, colIndex, resizing = false;
+
+    ths.forEach((th, i) => {
+        const handle = th.querySelector('.resize-handle');
+        if (!handle) return; // Skip columns without resize handles (like checkbox column)
+        handle.addEventListener('mousedown', function(e) {
+            e.preventDefault();
+            e.stopPropagation();
+            startX = e.pageX;
+            startWidth = th.offsetWidth;
+            colIndex = i;
+            resizing = true;
+            document.body.style.cursor = 'col-resize';
+        });
+    });
+
+    document.addEventListener('mousemove', function(e) {
+        if (!resizing) return;
+        const dx = e.pageX - startX;
+        const newWidth = Math.max(80, startWidth + dx);
+        const table = document.querySelector('table');
+        if (!table) return;
+        const th = table.querySelectorAll('th')[colIndex];
+        th.style.minWidth = newWidth + 'px';
+        th.style.width = newWidth + 'px';
+        // Set width for all tds in this column
+        table.querySelectorAll('tr').forEach(row => {
+            const cell = row.children[colIndex];
+            if (cell) {
+                cell.style.minWidth = newWidth + 'px';
+                cell.style.width = newWidth + 'px';
+            }
+        });
+    });
+
+    document.addEventListener('mouseup', function() {
+        if (resizing) {
+            resizing = false;
+            document.body.style.cursor = '';
+        }
+    });
+}
 
 // User authentication functions
 async function loadCurrentUser() {
@@ -175,8 +223,6 @@ function showSection(sectionName) {
         case 'requirements':
             loadGroups();
             loadRequirements();
-            break;
-        case 'upload':
             break;
     }
 }
@@ -602,21 +648,48 @@ async function showRequirementDetails(requirementId) {
             document.getElementById('requirement-details').innerHTML = `
                 <div class="row">
                     <div class="col-md-6">
-                        <h6>Basic Information</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>ID:</strong></td><td>${req.requirement_id}</td></tr>
-                            <tr><td><strong>Title:</strong></td><td>${req.title}</td></tr>
-                            <tr><td><strong>Description:</strong></td><td>${req.description ? marked.parse(req.description) : '-'}</td></tr>
-                            <tr><td><strong>Group:</strong></td><td><span class="badge bg-primary">${req.group_name || 'Default'}</span></td></tr>
-                        </table>
+                        <div class="detail-section">
+                            <h6>Basic Information</h6>
+                            <div class="detail-item">
+                                <div class="detail-label">ID:</div>
+                                <div class="detail-value">${req.requirement_id}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Title:</div>
+                                <div class="detail-value">${req.title}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Group:</div>
+                                <div class="detail-value">${req.group_name || 'Default'}</div>
+                            </div>
+                        </div>
                     </div>
                     <div class="col-md-6">
-                        <h6>Status & Timeline</h6>
-                        <table class="table table-sm">
-                            <tr><td><strong>Status:</strong></td><td><span class="badge bg-secondary">${req.status}</span></td></tr>
-                            <tr><td><strong>Created:</strong></td><td>${formatDate(req.created_at)}</td></tr>
-                            <tr><td><strong>Updated:</strong></td><td>${formatDate(req.updated_at)}</td></tr>
-                        </table>
+                        <div class="detail-section">
+                            <h6>Status & Timeline</h6>
+                            <div class="detail-item">
+                                <div class="detail-label">Status:</div>
+                                <div class="detail-value"><span class="badge bg-secondary">${req.status}</span></div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Created:</div>
+                                <div class="detail-value">${formatDate(req.created_at)}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Updated:</div>
+                                <div class="detail-value">${formatDate(req.updated_at)}</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div class="row mt-3">
+                    <div class="col-12">
+                        <div class="detail-section">
+                            <h6>Description</h6>
+                            <div class="detail-item-full">
+                                <div class="detail-value-full">${req.description ? marked.parse(req.description) : '-'}</div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             `;
@@ -669,6 +742,29 @@ async function showRequirementDetails(requirementId) {
             `;
             
             document.getElementById('requirement-relationships').innerHTML = relationshipsHtml;
+            
+            // Initialize tabs properly
+            const tabElements = document.querySelectorAll('#requirement-tabs .nav-link');
+            tabElements.forEach(tab => {
+                tab.addEventListener('click', function(e) {
+                    e.preventDefault();
+                    // Remove active class from all tabs and panes
+                    document.querySelectorAll('#requirement-tabs .nav-link').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-pane').forEach(p => {
+                        p.classList.remove('active', 'show');
+                    });
+                    
+                    // Add active class to clicked tab
+                    this.classList.add('active');
+                    
+                    // Show corresponding pane
+                    const targetId = this.getAttribute('href').substring(1);
+                    const targetPane = document.getElementById(targetId);
+                    if (targetPane) {
+                        targetPane.classList.add('active', 'show');
+                    }
+                });
+            });
             
             const modal = new bootstrap.Modal(document.getElementById('requirementDetailsModal'));
             modal.show();
@@ -820,7 +916,16 @@ async function exportRequirements() {
 function formatDate(dateString) {
     if (!dateString) return '-';
     const date = new Date(dateString);
-    return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
+    
+    // Format: dd.mm.yyyy hh:mm:ss
+    const day = String(date.getDate()).padStart(2, '0');
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const year = date.getFullYear();
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    
+    return `${day}.${month}.${year} ${hours}:${minutes}:${seconds}`;
 }
 
 function showAlert(message, type) {
@@ -894,47 +999,7 @@ async function loadUploadGroupOptions() {
     }
 }
 
-function triggerExcelUpload() {
-    document.getElementById('excel-file').click();
-}
 
-async function handleExcelFileChange() {
-    const fileInput = document.getElementById('excel-file');
-    const file = fileInput.files[0];
-    
-    if (file) {
-        const formData = new FormData();
-        formData.append('file', file);
-        
-        const groupId = document.getElementById('upload-group-id').value;
-        if (groupId) {
-            formData.append('group_id', groupId);
-        }
-        
-        try {
-            const response = await fetch('/api/upload-excel', {
-                method: 'POST',
-                body: formData
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                showAlert('Excel file uploaded successfully', 'success');
-                loadRequirements();
-                loadDashboard();
-            } else {
-                showAlert(data.error || 'Error uploading file', 'danger');
-            }
-        } catch (error) {
-            console.error('Error uploading file:', error);
-            showAlert('Error uploading file', 'danger');
-        }
-        
-        // Clear the file input
-        fileInput.value = '';
-    }
-}
 
 // Batch editing functions
 function handleRequirementSelection(event, requirementId) {
