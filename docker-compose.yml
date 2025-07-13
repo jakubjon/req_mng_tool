@@ -1,0 +1,74 @@
+services:
+  # Flask Application
+  flask-app:
+    build: .
+    ports:
+      - "5000:5000"
+    environment:
+      - FLASK_ENV=development
+      - DATABASE_URL=postgresql://directus:directus@postgres:5432/directus
+      - DIRECTUS_URL=http://directus:8055
+      - DIRECTUS_TOKEN=${DIRECTUS_TOKEN}
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      - postgres
+      - directus
+      - db-init
+    networks:
+      - req-mng-network
+
+  # Database initialization
+  db-init:
+    build: .
+    command: python init_db.py
+    environment:
+      - DATABASE_URL=postgresql://directus:directus@postgres:5432/directus
+    depends_on:
+      - postgres
+    networks:
+      - req-mng-network
+
+  # Directus CMS
+  directus:
+    image: directus/directus:latest
+    ports:
+      - "8055:8055"
+    environment:
+      - KEY=255d861b-5ea1-5996-9aa3-922530ec40b1
+      - SECRET=6116487b-cda1-52c2-b5b5-c8022c45e263
+      - DB_CLIENT=pg
+      - DB_HOST=postgres
+      - DB_PORT=5432
+      - DB_DATABASE=directus
+      - DB_USER=directus
+      - DB_PASSWORD=directus
+      - ADMIN_EMAIL=admin@admin.com
+      - ADMIN_PASSWORD=admin123
+      - CORS_ENABLED=true
+      - CORS_ORIGIN=http://localhost:5000
+    depends_on:
+      - postgres
+    networks:
+      - req-mng-network
+
+  # PostgreSQL Database
+  postgres:
+    image: postgres:13-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_DB=directus
+      - POSTGRES_USER=directus
+      - POSTGRES_PASSWORD=directus
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - req-mng-network
+
+volumes:
+  postgres_data:
+
+networks:
+  req-mng-network:
+    driver: bridge 

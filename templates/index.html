@@ -1,0 +1,493 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requirement Management Tool</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
+    <style>
+        .sidebar {
+            min-height: 100vh;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        .main-content {
+            background-color: #f8f9fa;
+        }
+        .card {
+            border: none;
+            box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+            border-radius: 0.5rem;
+        }
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+        }
+        .table-responsive {
+            border-radius: 0.5rem;
+        }
+        .requirement-row {
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .requirement-row:hover {
+            background-color: #f8f9fa;
+        }
+        .status-badge {
+            font-size: 0.75rem;
+        }
+        .priority-high { background-color: #dc3545; }
+        .priority-medium { background-color: #ffc107; }
+        .priority-low { background-color: #28a745; }
+        .upload-area {
+            border: 2px dashed #dee2e6;
+            border-radius: 0.5rem;
+            padding: 2rem;
+            text-align: center;
+            transition: border-color 0.3s;
+        }
+        .upload-area:hover {
+            border-color: #667eea;
+        }
+        .history-item {
+            border-left: 3px solid #667eea;
+            padding-left: 1rem;
+            margin-bottom: 1rem;
+        }
+        .tree-view {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        .tree-node {
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            border-radius: 0.25rem;
+            background-color: #fff;
+            border: 1px solid #dee2e6;
+        }
+        .tree-children {
+            margin-left: 2rem;
+        }
+        .group-tree {
+            max-height: 600px;
+            overflow-y: auto;
+        }
+        .group-node {
+            padding: 0.5rem;
+            margin: 0.25rem 0;
+            border-radius: 0.25rem;
+            background-color: #f8f9fa;
+            border: 1px solid #dee2e6;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        .group-node:hover {
+            background-color: #e9ecef;
+        }
+        .group-node.selected {
+            background-color: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+        .group-node .group-name {
+            font-weight: 500;
+        }
+        .group-node .group-count {
+            font-size: 0.75rem;
+            opacity: 0.7;
+        }
+        .group-children {
+            margin-left: 1.5rem;
+        }
+        .group-expand-btn {
+            cursor: pointer;
+            margin-right: 0.5rem;
+            transition: transform 0.2s;
+        }
+        .group-expand-btn.expanded {
+            transform: rotate(90deg);
+        }
+    </style>
+</head>
+<body>
+    <div class="container-fluid">
+        <div class="row">
+            <!-- Sidebar -->
+            <div class="col-md-3 col-lg-2 sidebar p-0">
+                <div class="p-3 text-white">
+                    <h4><i class="fas fa-tasks me-2"></i>Req Manager</h4>
+                    <hr class="text-white">
+                    <ul class="nav nav-pills flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link text-white active" href="#" onclick="showSection('dashboard')">
+                                <i class="fas fa-tachometer-alt me-2"></i>Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="#" onclick="showSection('requirements')">
+                                <i class="fas fa-list me-2"></i>Requirements
+                            </a>
+                        </li>
+                    </ul>
+                    <div class="mt-4">
+                        <div class="card bg-light">
+                            <div class="card-header p-2">
+                                <h6 class="mb-0"><i class="fas fa-sitemap me-2"></i>Group Hierarchy</h6>
+                            </div>
+                            <div class="card-body p-2">
+                                <div id="group-tree" class="group-tree">
+                                    <!-- Group hierarchy will be loaded here -->
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Content -->
+            <div class="col-md-9 col-lg-10 main-content p-4">
+                <!-- Dashboard Section -->
+                <div id="dashboard-section" class="section">
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h2><i class="fas fa-tachometer-alt me-2"></i>Dashboard</h2>
+                        </div>
+                    </div>
+                    <div class="row">
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="fas fa-list fa-2x text-primary mb-2"></i>
+                                    <h5 class="card-title" id="total-requirements">0</h5>
+                                    <p class="card-text">Total Requirements</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="fas fa-clock fa-2x text-warning mb-2"></i>
+                                    <h5 class="card-title" id="draft-requirements">0</h5>
+                                    <p class="card-text">Draft</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="fas fa-check-circle fa-2x text-success mb-2"></i>
+                                    <h5 class="card-title" id="completed-requirements">0</h5>
+                                    <p class="card-text">Completed</p>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-3 mb-3">
+                            <div class="card text-center">
+                                <div class="card-body">
+                                    <i class="fas fa-exclamation-triangle fa-2x text-danger mb-2"></i>
+                                    <h5 class="card-title" id="high-priority">0</h5>
+                                    <p class="card-text">High Priority</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Requirements Section -->
+                <div id="requirements-section" class="section" style="display: none;">
+                    <div class="row mb-4">
+                        <div class="col-12 d-flex justify-content-between align-items-center">
+                            <h2><i class="fas fa-list me-2"></i>Requirements</h2>
+                            <div>
+                                <button class="btn btn-success me-2" onclick="showAddGroupModal()">
+                                    <i class="fas fa-folder-plus me-2"></i>Add Group
+                                </button>
+                                <button class="btn btn-primary me-2" onclick="showAddRequirementModal()">
+                                    <i class="fas fa-plus me-2"></i>Add Requirement
+                                </button>
+                                <button class="btn btn-secondary me-2" onclick="triggerExcelUpload()">
+                                    <i class="fas fa-upload me-2"></i>Upload Excel
+                                </button>
+                                <button class="btn btn-primary" onclick="exportRequirements()">
+                                    <i class="fas fa-download me-2"></i>Export Excel
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <input type="file" id="excel-file" accept=".xlsx,.xls" style="display:none;" onchange="handleExcelFileChange()">
+                    
+                    <div class="row">
+                        <!-- Requirements Content -->
+                        <div class="col-md-9">
+                            <!-- Filters -->
+                            <div class="row mb-3">
+                                <div class="col-md-4">
+                                    <input type="text" class="form-control" id="search-input" placeholder="Search requirements...">
+                                </div>
+                                <div class="col-md-2">
+                                    <button class="btn btn-outline-primary" onclick="exportRequirements()">
+                                        <i class="fas fa-download me-2"></i>Export
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Requirements Table -->
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-hover">
+                                            <thead>
+                                                <tr>
+                                                    <th>ID</th>
+                                                    <th>Title</th>
+                                                    <th>Description</th>
+                                                    <th>Status</th>
+                                                    <th>Children</th>
+                                                    <th>Updated</th>
+                                                    <th>Actions</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="requirements-table-body">
+                                                <!-- Requirements will be loaded here -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Upload Section -->
+                <div id="upload-section" class="section" style="display: none;">
+                    <div class="row mb-4">
+                        <div class="col-12">
+                            <h2><i class="fas fa-upload me-2"></i>Upload Excel File</h2>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="card">
+                                <div class="card-body">
+                                    <div class="upload-area" id="upload-area">
+                                        <i class="fas fa-cloud-upload-alt fa-3x text-muted mb-3"></i>
+                                        <h5>Drag and drop Excel file here</h5>
+                                        <p class="text-muted">or click to browse</p>
+                                        <input type="file" id="excel-file" accept=".xlsx,.xls" style="display: none;">
+                                        <button class="btn btn-primary" onclick="document.getElementById('excel-file').click()">
+                                            Choose File
+                                        </button>
+                                    </div>
+                                    <div class="mt-3">
+                                        <label class="form-label">Select Group for Imported Requirements</label>
+                                        <select class="form-select" id="upload-group-id">
+                                            <option value="">Select a group</option>
+                                        </select>
+                                    </div>
+                                    <div class="mt-3">
+                                        <h6>Expected Excel Format:</h6>
+                                        <ul class="text-muted">
+                                            <li><strong>Required:</strong> Requirement ID, Title</li>
+                                            <li><strong>Optional:</strong> Description, Priority, Status, Category, Parent ID</li>
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div class="col-md-4">
+                            <!-- Upload history removed -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Group Modal -->
+    <div class="modal fade" id="groupModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="group-modal-title">Add Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="group-form">
+                        <div class="mb-3">
+                            <label class="form-label">Group Name</label>
+                            <input type="text" class="form-control" id="group-name" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="group-description" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Parent Group</label>
+                            <select class="form-select" id="group-parent-id">
+                                <option value="">No Parent</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-success" onclick="saveGroup()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Add/Edit Requirement Modal -->
+    <div class="modal fade" id="requirementModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="modal-title">Add Requirement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="requirement-form">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Requirement ID</label>
+                                    <input type="text" class="form-control" id="req-id" required>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="mb-3">
+                                    <label class="form-label">Parent ID</label>
+                                    <select class="form-select" id="parent-id">
+                                        <option value="">No Parent</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Title</label>
+                            <input type="text" class="form-control" id="req-title" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Description</label>
+                            <textarea class="form-control" id="req-description" rows="3"></textarea>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Status</label>
+                                    <select class="form-select" id="req-status">
+                                        <option value="Draft" selected>Draft</option>
+                                        <option value="In Progress">In Progress</option>
+                                        <option value="Review">Review</option>
+                                        <option value="Completed">Completed</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
+                                    <label class="form-label">Group</label>
+                                    <select class="form-select" id="req-group-id" required>
+                                        <option value="">Select a group</option>
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" onclick="saveRequirement()">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Move Requirement Modal -->
+    <div class="modal fade" id="moveRequirementModal" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Move Requirement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="move-requirement-form">
+                        <div class="mb-3">
+                            <label class="form-label">Requirement ID</label>
+                            <input type="text" class="form-control" id="move-req-id" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Current Group</label>
+                            <input type="text" class="form-control" id="move-current-group" readonly>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">New Group</label>
+                            <select class="form-select" id="move-new-group" required>
+                                <option value="">Select a group</option>
+                            </select>
+                        </div>
+                        <div class="alert alert-warning">
+                            <i class="fas fa-exclamation-triangle me-2"></i>
+                            <strong>Note:</strong> Moving a requirement to a different group will remove its parent-child relationships.
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-warning" onclick="moveRequirement()">Move</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Requirement Details Modal -->
+    <div class="modal fade" id="requirementDetailsModal" tabindex="-1">
+        <div class="modal-dialog modal-xl">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Requirement Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <ul class="nav nav-tabs" id="requirement-tabs">
+                        <li class="nav-item">
+                            <a class="nav-link active" data-bs-toggle="tab" href="#details-tab">Details</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#history-tab">History</a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" data-bs-toggle="tab" href="#relationships-tab">Relationships</a>
+                        </li>
+                    </ul>
+                    
+                    <div class="tab-content mt-3">
+                        <div class="tab-pane fade show active" id="details-tab">
+                            <div id="requirement-details">
+                                <!-- Requirement details will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="history-tab">
+                            <div id="requirement-history">
+                                <!-- History will be loaded here -->
+                            </div>
+                        </div>
+                        <div class="tab-pane fade" id="relationships-tab">
+                            <div id="requirement-relationships">
+                                <!-- Relationships will be loaded here -->
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/js/select2.min.js"></script>
+    <script src="/static/js/app.js"></script>
+</body>
+</html> 
