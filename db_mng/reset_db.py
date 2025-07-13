@@ -12,7 +12,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from app.app import app
 from app.db import db
-from app.models import Requirement, CellHistory, Group
+from app.models import Requirement, CellHistory, Group, User
 
 def reset_database():
     """Drop and recreate all database tables"""
@@ -32,10 +32,21 @@ def reset_database():
                 description='Default group for requirements'
             )
             db.session.add(default_group)
+            
+            # Create default admin user
+            admin_user = User(
+                username='admin',
+                email='admin@example.com'
+            )
+            admin_user.set_password('admin123')
+            db.session.add(admin_user)
+            
             db.session.commit()
-            print("✅ Default group created")
+            print("✅ Default group and admin user created")
+            print("📝 Admin credentials: admin / admin123")
             
             print("Tables created:")
+            print("  - users")
             print("  - groups")
             print("  - requirements (with group_id, chapter)")
             print("  - cell_history")

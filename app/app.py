@@ -1,5 +1,6 @@
-from flask import Flask, request, jsonify, send_file, render_template
+from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for
 from flask_cors import CORS
+from flask_session import Session
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
@@ -7,7 +8,7 @@ from datetime import datetime
 import uuid
 from dotenv import load_dotenv
 from app.db import db
-from app.models import Requirement, CellHistory, Group
+from app.models import Requirement, CellHistory, Group, User
 from app.config import config
 
 # Load environment variables
@@ -20,16 +21,19 @@ CORS(app)
 app.config.from_object(config['development'])
 app.config['UPLOAD_FOLDER'] = 'uploads'
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-
-# Directus configuration
-DIRECTUS_URL = os.getenv('DIRECTUS_URL', 'http://localhost:8055')
-DIRECTUS_TOKEN = os.getenv('DIRECTUS_TOKEN')
+app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
+app.config['SESSION_TYPE'] = 'filesystem'
+Session(app)
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 
 # Import db from models and initialize it
 db.init_app(app)
+
+# Directus configuration
+DIRECTUS_URL = os.getenv('DIRECTUS_URL', 'http://localhost:8055')
+DIRECTUS_TOKEN = os.getenv('DIRECTUS_TOKEN')
 
 # Directus API helper functions
 def get_directus_headers():
@@ -39,15 +43,117 @@ def get_directus_headers():
     }
 
 def get_current_user():
-    """Get current user from Directus (simplified - in real app, use proper auth)"""
-    # This is a simplified version - in a real app, you'd get this from the session/token
-    return request.headers.get('X-User-ID', 'unknown_user')
+    """Get current user from session"""
+    if 'user_id' in session:
+        user = User.query.get(session['user_id'])
+        return user.username if user else None
+    return None
+
+def login_required(f):
+    """Decorator to require login for routes"""
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return jsonify({'success': False, 'error': 'Authentication required'}), 401
+        return f(*args, **kwargs)
+    decorated_function.__name__ = f.__name__
+    return decorated_function
 
 # Web Routes
 @app.route('/')
 def index():
     """Serve the main application interface"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
     return render_template('index.html')
+
+@app.route('/login')
+def login_page():
+    """Serve the login page"""
+    if 'user_id' in session:
+        return redirect(url_for('index'))
+    return render_template('login.html')
+
+@app.route('/api/login', methods=['POST'])
+def login():
+    """Handle user login"""
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        
+        if not username or not password:
+            return jsonify({'success': False, 'error': 'Username and password required'}), 400
+        
+        user = User.query.filter_by(username=username).first()
+        if user and user.check_password(password) and user.is_active:
+            session['user_id'] = user.id
+            return jsonify({
+                'success': True,
+                'message': 'Login successful',
+                'user': user.to_dict()
+            })
+        else:
+            return jsonify({'success': False, 'error': 'Invalid username or password'}), 401
+    
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/logout', methods=['POST'])
+def logout():
+    """Handle user logout"""
+    session.pop('user_id', None)
+    return jsonify({'success': True, 'message': 'Logout successful'})
+
+@app.route('/api/register', methods=['POST'])
+def register():
+    """Handle user registration"""
+    try:
+        data = request.json
+        username = data.get('username')
+        password = data.get('password')
+        email = data.get('email')
+        
+        if not username or not password:
+            return jsonify({'success': False, 'error': 'Username and password required'}), 400
+        
+        # Check if user already exists
+        if User.query.filter_by(username=username).first():
+            return jsonify({'success': False, 'error': 'Username already exists'}), 400
+        
+        if email and User.query.filter_by(email=email).first():
+            return jsonify({'success': False, 'error': 'Email already exists'}), 400
+        
+        # Create new user
+        user = User(username=username, email=email)
+        user.set_password(password)
+        
+        db.session.add(user)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'User registered successfully',
+            'user': user.to_dict()
+        })
+    
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/user/current')
+def get_current_user_info():
+    """Get current user information"""
+    if 'user_id' not in session:
+        return jsonify({'success': False, 'error': 'Not logged in'}), 401
+    
+    user = User.query.get(session['user_id'])
+    if not user:
+        return jsonify({'success': False, 'error': 'User not found'}), 404
+    
+    return jsonify({
+        'success': True,
+        'user': user.to_dict()
+    })
 
 # API Routes
 @app.route('/api/groups', methods=['GET'])

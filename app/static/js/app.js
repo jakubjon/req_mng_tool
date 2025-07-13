@@ -4,13 +4,105 @@ let requirementsData = [];
 let groupsData = [];
 let selectedRequirements = new Set(); // Track selected requirements for batch editing
 
+// EasyMDE instance for requirement modal
+let reqDescriptionMDE = null;
+
+function initReqDescriptionMDE() {
+    // Wait for the modal to be fully shown
+    setTimeout(() => {
+        const editorDiv = document.getElementById('req-description-editor');
+        if (!editorDiv) {
+            console.error('req-description-editor div not found');
+            return;
+        }
+        
+        // Clear any existing content
+        editorDiv.innerHTML = '';
+        
+        // Create a textarea element for EasyMDE
+        const textarea = document.createElement('textarea');
+        textarea.id = 'req-description-textarea';
+        editorDiv.appendChild(textarea);
+        
+        // Initialize EasyMDE
+        reqDescriptionMDE = new EasyMDE({
+            element: textarea,
+            autoDownloadFontAwesome: false,
+            spellChecker: false,
+            status: false,
+            minHeight: '100px',
+            maxHeight: '300px',
+            toolbar: ["bold", "italic", "heading", "|", "quote", "unordered-list", "ordered-list", "|", "link", "preview", "guide"]
+        });
+    }, 100);
+}
+
+function setReqDescriptionValue(value) {
+    if (!reqDescriptionMDE) {
+        // If EasyMDE is not initialized, set the value after initialization
+        setTimeout(() => {
+            if (reqDescriptionMDE) {
+                reqDescriptionMDE.value(value || '');
+            }
+        }, 200);
+        return;
+    }
+    reqDescriptionMDE.value(value || '');
+}
+
+function getReqDescriptionValue() {
+    if (!reqDescriptionMDE) return '';
+    return reqDescriptionMDE.value();
+}
+
+function destroyReqDescriptionMDE() {
+    if (reqDescriptionMDE) {
+        reqDescriptionMDE.toTextArea();
+        reqDescriptionMDE = null;
+    }
+}
+
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
+    loadCurrentUser();
     loadDashboard();
     setupEventListeners();
     loadGroups(); // Ensure groupsData is loaded on page load
     loadUploadGroupOptions();
 });
+
+// User authentication functions
+async function loadCurrentUser() {
+    try {
+        const response = await fetch('/api/user/current');
+        const data = await response.json();
+        
+        if (data.success) {
+            document.getElementById('current-user').textContent = data.user.username;
+        } else {
+            // Redirect to login if not authenticated
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Error loading user info:', error);
+        window.location.href = '/login';
+    }
+}
+
+async function logout() {
+    try {
+        const response = await fetch('/api/logout', {
+            method: 'POST'
+        });
+        
+        if (response.ok) {
+            window.location.href = '/login';
+        }
+    } catch (error) {
+        console.error('Error during logout:', error);
+        window.location.href = '/login';
+    }
+}
 
 // Setup event listeners
 function setupEventListeners() {
@@ -46,6 +138,15 @@ function setupEventListeners() {
     document.getElementById('status-filter').addEventListener('change', filterRequirements);
     document.getElementById('chapter-filter').addEventListener('change', filterRequirements);
     document.getElementById('group-filter').addEventListener('change', filterRequirements);
+    
+    // Modal cleanup for EasyMDE
+    const requirementModal = document.getElementById('requirementModal');
+    if (requirementModal) {
+        requirementModal.addEventListener('hidden.bs.modal', function() {
+            // Destroy EasyMDE when modal is hidden
+            destroyReqDescriptionMDE();
+        });
+    }
 }
 
 // Navigation functions
@@ -303,7 +404,7 @@ function renderRequirementsTable(requirements) {
             <td><input type="checkbox" class="form-check-input requirement-checkbox" value="${req.requirement_id}" ${selectedRequirements.has(req.requirement_id) ? 'checked' : ''} onchange="handleRequirementSelection(event, '${req.requirement_id}')" onclick="event.stopPropagation();"></td>
             <td>${req.requirement_id}</td>
             <td>${req.title}</td>
-            <td>${req.description ? req.description : ''}</td>
+            <td>${req.description ? marked.parse(req.description) : ''}</td>
             <td><span class="badge bg-secondary">${req.status}</span></td>
             <td>${req.chapter || '-'}</td>
             <td>${req.group_name || '-'}</td>
@@ -325,9 +426,6 @@ function filterRequirements() {
     const chapterFilter = document.getElementById('chapter-filter').value;
     const groupFilter = document.getElementById('group-filter').value;
     
-    console.log('Filtering with:', { searchTerm, statusFilter, chapterFilter, groupFilter });
-    console.log('Sample requirement:', requirementsData[0]);
-    
     const filtered = requirementsData.filter(req => {
         // Text search
         const matchesSearch = !searchTerm || 
@@ -344,19 +442,9 @@ function filterRequirements() {
         // Group filter (compare as strings)
         const matchesGroup = !groupFilter || String(req.group_id) === String(groupFilter);
         
-        console.log(`Requirement ${req.requirement_id}:`, {
-            group_id: req.group_id,
-            groupFilter,
-            matchesGroup,
-            matchesSearch,
-            matchesStatus,
-            matchesChapter
-        });
-        
         return matchesSearch && matchesStatus && matchesChapter && matchesGroup;
     });
     
-    console.log('Filtered results:', filtered.length);
     renderRequirementsTable(filtered);
     populateGroupFilter(); // Ensure filter is up to date
 }
@@ -403,12 +491,13 @@ function showAddRequirementModal() {
     // Load parent options
     loadParentOptions();
     loadGroupOptions();
-    // Set group dropdown to currentGroupId
-    // if (currentGroupId) { // Removed as per edit hint
-    //     document.getElementById('req-group-id').value = currentGroupId;
-    // }
+    setReqDescriptionValue('');
+    
     const modal = new bootstrap.Modal(document.getElementById('requirementModal'));
     modal.show();
+    
+    // Initialize EasyMDE after modal is shown
+    initReqDescriptionMDE();
 }
 
 function editRequirement(requirementId) {
@@ -419,16 +508,19 @@ function editRequirement(requirementId) {
     // Populate form
     document.getElementById('req-id').value = requirement.requirement_id;
     document.getElementById('req-title').value = requirement.title;
-    document.getElementById('req-description').value = requirement.description || '';
     document.getElementById('req-status').value = requirement.status;
     loadParentOptions(requirement.parent_id);
     loadGroupOptions();
-    // Set group dropdown to requirement's group
     if (requirement.group_id) {
         document.getElementById('req-group-id').value = requirement.group_id;
     }
+    
     const modal = new bootstrap.Modal(document.getElementById('requirementModal'));
     modal.show();
+    
+    // Initialize EasyMDE after modal is shown and set the value
+    initReqDescriptionMDE();
+    setReqDescriptionValue(requirement.description || '');
 }
 
 async function loadParentOptions(selectedParentId = '') {
@@ -459,7 +551,7 @@ async function saveRequirement() {
     const formData = {
         requirement_id: document.getElementById('req-id').value,
         title: document.getElementById('req-title').value,
-        description: document.getElementById('req-description').value,
+        description: getReqDescriptionValue(),
         status: document.getElementById('req-status').value,
         parent_id: document.getElementById('parent-id').value || null,
         chapter: document.getElementById('chapter-field').value || null
@@ -468,14 +560,12 @@ async function saveRequirement() {
     if (groupId) {
         formData.group_id = groupId;
     }
-    
+    console.log('saveRequirement called, formData:', formData);
     try {
         const url = currentRequirementId ? 
             `/api/requirements/${currentRequirementId}` : 
             '/api/requirements';
-        
         const method = currentRequirementId ? 'PUT' : 'POST';
-        
         const response = await fetch(url, {
             method: method,
             headers: {
@@ -484,13 +574,12 @@ async function saveRequirement() {
             },
             body: JSON.stringify(formData)
         });
-        
         const data = await response.json();
-        
+        console.log('saveRequirement response:', data);
         if (data.success) {
             showAlert('Requirement saved successfully', 'success');
             bootstrap.Modal.getInstance(document.getElementById('requirementModal')).hide();
-            loadRequirements(); // Changed from loadRequirements(currentGroupId)
+            loadRequirements();
         } else {
             showAlert(data.error || 'Error saving requirement', 'danger');
         }
@@ -517,7 +606,7 @@ async function showRequirementDetails(requirementId) {
                         <table class="table table-sm">
                             <tr><td><strong>ID:</strong></td><td>${req.requirement_id}</td></tr>
                             <tr><td><strong>Title:</strong></td><td>${req.title}</td></tr>
-                            <tr><td><strong>Description:</strong></td><td>${req.description || '-'}</td></tr>
+                            <tr><td><strong>Description:</strong></td><td>${req.description ? marked.parse(req.description) : '-'}</td></tr>
                             <tr><td><strong>Group:</strong></td><td><span class="badge bg-primary">${req.group_name || 'Default'}</span></td></tr>
                         </table>
                     </div>
