@@ -93,7 +93,6 @@ class Requirement(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String(50), default='Draft')
     group_id = db.Column(db.String(36), db.ForeignKey('groups.id'), nullable=False, index=True)
-    parent_id = db.Column(db.String(36), db.ForeignKey('requirements.id'), index=True)  # Deprecated, ignore in logic
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = db.Column(db.String(100))
@@ -111,20 +110,20 @@ class Requirement(db.Model):
         backref='children_m2m'
     )
     
-    # Self-referential relationship for parent-child (within same group)
-    children = db.relationship(
-        'Requirement',
-        backref=db.backref('parent', remote_side=[id]),
-        cascade='all, delete-orphan',
-        lazy='dynamic'
-    )
+    # REMOVED: Self-referential relationship for parent-child (within same group)
+    # children = db.relationship(
+    #     'Requirement',
+    #     backref=db.backref('parent', remote_side=[id]),
+    #     cascade='all, delete-orphan',
+    #     lazy='dynamic'
+    # )
     
     def __repr__(self):
         return f'<Requirement {self.requirement_id}: {self.title}>'
     
-    def to_dict(self):
-        """Convert requirement to dictionary"""
-        return {
+    def to_dict(self, shallow=False):
+        """Convert requirement to dictionary. If shallow, only include IDs for children/parents."""
+        data = {
             'id': self.id,
             'requirement_id': self.requirement_id,
             'title': self.title,
@@ -133,13 +132,11 @@ class Requirement(db.Model):
             'chapter': self.chapter,
             'group_id': self.group_id,
             'group_name': self.group_obj.name if self.group_obj else None,
-            'parent_id': self.parent_id,  # Deprecated
             'parents': [p.requirement_id for p in self.parents],
             'parent_objs': [
                 {'requirement_id': p.requirement_id, 'title': p.title}
                 for p in self.parents
             ],
-            'children': [c.to_dict() for c in self.children_m2m],
             'children_count': len(self.children_m2m),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
@@ -148,6 +145,13 @@ class Requirement(db.Model):
             'graph_x': self.graph_x,
             'graph_y': self.graph_y
         }
+        if shallow:
+            # Only include children as IDs
+            data['children'] = [c.requirement_id for c in self.children_m2m]
+        else:
+            # Full child objects (but shallow=True for their children to prevent deep recursion)
+            data['children'] = [c.to_dict(shallow=True) for c in self.children_m2m]
+        return data
 
 class CellHistory(db.Model):
     """Model to track changes to requirement fields"""

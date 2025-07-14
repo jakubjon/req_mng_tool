@@ -552,7 +552,6 @@ function showAddRequirementModal() {
     document.getElementById('requirement-form').reset();
     currentRequirementId = null;
     // Load parent options
-    loadParentOptions();
     loadGroupOptions();
     setReqDescriptionValue('');
     
@@ -572,7 +571,6 @@ function editRequirement(requirementId) {
     document.getElementById('req-id').value = requirement.requirement_id;
     document.getElementById('req-title').value = requirement.title;
     document.getElementById('req-status').value = requirement.status;
-    loadParentOptions(requirement.parent_id);
     loadGroupOptions();
     if (requirement.group_id) {
         document.getElementById('req-group-id').value = requirement.group_id;
@@ -586,37 +584,12 @@ function editRequirement(requirementId) {
     setReqDescriptionValue(requirement.description || '');
 }
 
-async function loadParentOptions(selectedParentId = '') {
-    try {
-        const response = await fetch('/api/requirements');
-        const data = await response.json();
-        
-        if (data.success) {
-            const parentSelect = document.getElementById('parent-id');
-            parentSelect.innerHTML = '<option value="">No Parent</option>';
-            
-            data.data.forEach(req => {
-                const option = document.createElement('option');
-                option.value = req.requirement_id;
-                option.textContent = `${req.requirement_id} - ${req.title}`;
-                if (req.requirement_id === selectedParentId) {
-                    option.selected = true;
-                }
-                parentSelect.appendChild(option);
-            });
-        }
-    } catch (error) {
-        console.error('Error loading parent options:', error);
-    }
-}
-
 async function saveRequirement() {
     const formData = {
         requirement_id: document.getElementById('req-id').value,
         title: document.getElementById('req-title').value,
         description: getReqDescriptionValue(),
         status: document.getElementById('req-status').value,
-        parent_id: document.getElementById('parent-id').value || null,
         chapter: document.getElementById('chapter-field').value || null
     };
     const groupId = document.getElementById('req-group-id').value;
@@ -1344,17 +1317,25 @@ function initializeGraph() {
     }
     
     // Create nodes dataset
-    const nodes = new vis.DataSet(graphData.nodes.map(node => ({
-        ...node,
-        shape: 'box',
-        font: {
-            size: 12,
-            face: 'Arial'
-        },
-        borderWidth: 2,
-        shadow: true,
-        margin: 10
-    })));
+    const nodes = new vis.DataSet(graphData.nodes.map(node => {
+        const nodeData = {
+            ...node,
+            shape: 'box',
+            font: {
+                size: 12,
+                face: 'Arial'
+            },
+            borderWidth: 2,
+            shadow: true,
+            margin: 10
+        };
+        if (typeof node.x === 'number' && typeof node.y === 'number') {
+            nodeData.x = node.x;
+            nodeData.y = node.y;
+            nodeData.fixed = { x: false, y: false };
+        }
+        return nodeData;
+    }));
     
     // Create edges dataset
     const edges = new vis.DataSet(graphData.edges);
@@ -1392,6 +1373,29 @@ function initializeGraph() {
     
     // Create network
     network = new vis.Network(container, { nodes, edges }, options);
+    
+    // Save node position on drag end
+    network.on('dragEnd', function(params) {
+        // console.log('dragEnd event fired:', params);
+        if (params.nodes && params.nodes.length > 0) {
+            // Get all positions at once
+            const positions = network.getPositions(params.nodes);
+            params.nodes.forEach(nodeId => {
+                const node = nodes.get(nodeId);
+                const req = graphData.nodes.find(n => n.id === nodeId || n.id == node.id);
+                const pos = positions[nodeId];
+                // console.log('Node after drag:', node);
+                // console.log('Mapped requirement for node:', req);
+                // console.log('Position from network:', pos);
+                if (pos && req && req.requirement_id) {
+                    // console.log('Saving position for requirement:', req.requirement_id, pos.x, pos.y);
+                    saveNodePosition(req.requirement_id, pos.x, pos.y);
+                } else {
+                    // console.warn('Could not map node to requirement or missing coordinates:', node, req, pos);
+                }
+            });
+        }
+    });
     
     // Event listeners
     network.on('click', function(params) {

@@ -297,14 +297,12 @@ def get_requirements():
             query = query.filter(Requirement.chapter == chapter)
         if group_id:
             query = query.filter(Requirement.group_id == group_id)
-        if parent_id:
-            query = query.filter(Requirement.parent_id == parent_id)
         
         requirements = query.all()
         
         return jsonify({
             'success': True,
-            'data': [req.to_dict() for req in requirements]
+            'data': [req.to_dict(shallow=True) for req in requirements]
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -341,7 +339,7 @@ def update_requirement(requirement_id):
         if 'group_id' in data and not data['group_id']:
             return jsonify({'success': False, 'error': 'Group is required'}), 400
         # Track changes for each field
-        fields_to_track = ['title', 'description', 'status', 'chapter', 'parent_id']
+        fields_to_track = ['title', 'description', 'status', 'chapter']
         for field in fields_to_track:
             if field in data and getattr(requirement, field) != data[field]:
                 # Record the change
@@ -391,7 +389,6 @@ def create_requirement():
             status=data.get('status', 'Draft'),
             chapter=data.get('chapter'),
             group_id=group_id,
-            parent_id=data.get('parent_id'),
             created_by=current_user,
             updated_by=current_user
         )
@@ -573,7 +570,6 @@ def move_requirement(requirement_id):
         
         # Update requirement
         requirement.group_id = new_group_id
-        requirement.parent_id = None  # Remove parent relationship when moving
         requirement.updated_at = datetime.utcnow()
         
         # Add to history
