@@ -58,19 +58,39 @@ def login_required(f):
     decorated_function.__name__ = f.__name__
     return decorated_function
 
+# Utility function to check if any users exist
+
+def users_exist():
+    return User.query.first() is not None
+
 # Web Routes
 @app.route('/')
 def index():
     """Serve the main application interface"""
+    # If no users exist, redirect to login for registration
+    if not users_exist():
+        return redirect(url_for('login'))
     if 'user_id' not in session:
+        return redirect(url_for('login'))
+    # Defensive: check if user_id is valid
+    user = User.query.get(session['user_id'])
+    if not user:
+        session.pop('user_id', None)
         return redirect(url_for('login'))
     return render_template('index.html')
 
 @app.route('/login')
 def login_page():
     """Serve the login page"""
+    # If no users exist, allow registration
+    if not users_exist():
+        return render_template('login.html')
     if 'user_id' in session:
-        return redirect(url_for('index'))
+        user = User.query.get(session['user_id'])
+        if user:
+            return redirect(url_for('index'))
+        else:
+            session.pop('user_id', None)
     return render_template('login.html')
 
 @app.route('/api/login', methods=['POST'])
@@ -143,13 +163,14 @@ def register():
 @app.route('/api/user/current')
 def get_current_user_info():
     """Get current user information"""
+    if not users_exist():
+        return jsonify({'success': False, 'error': 'No users exist'}), 401
     if 'user_id' not in session:
         return jsonify({'success': False, 'error': 'Not logged in'}), 401
-    
     user = User.query.get(session['user_id'])
     if not user:
-        return jsonify({'success': False, 'error': 'User not found'}), 404
-    
+        session.pop('user_id', None)
+        return jsonify({'success': False, 'error': 'User not found'}), 401
     return jsonify({
         'success': True,
         'user': user.to_dict()
@@ -290,22 +311,16 @@ def get_requirements():
 
 @app.route('/api/requirements/<requirement_id>', methods=['GET'])
 def get_requirement(requirement_id):
-    """Get a specific requirement with details"""
+    """Get a specific requirement with details (M2M children)"""
     try:
         requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
         if not requirement:
             return jsonify({'success': False, 'error': 'Requirement not found'}), 404
-        
         # Get history
         history = CellHistory.query.filter_by(requirement_id=requirement.id).order_by(CellHistory.changed_at.desc()).all()
-        
-        # Get children
-        children = requirement.children.all()
-        
         data = requirement.to_dict()
         data['history'] = [h.to_dict() for h in history]
-        data['children'] = [c.to_dict() for c in children]
-        
+        # children already included as M2M in to_dict
         return jsonify({
             'success': True,
             'data': data
@@ -411,7 +426,7 @@ def delete_requirement(requirement_id):
 
 @app.route('/api/upload-excel', methods=['POST'])
 def upload_excel():
-    """Upload and process Excel file"""
+    """Upload and process Excel file (M2M parent-child)"""
     try:
         if 'file' not in request.files:
             return jsonify({'success': False, 'error': 'No file provided'}), 400
@@ -432,7 +447,6 @@ def upload_excel():
         if not group:
             raise ValueError('Selected group does not exist.')
         current_user = get_current_user()
-        # Process Excel file
         try:
             if filename.endswith('.xlsx'):
                 df = pd.read_excel(filepath, engine='openpyxl')
@@ -443,60 +457,43 @@ def upload_excel():
             if missing_columns:
                 raise ValueError(f"Missing required columns: {missing_columns}")
             records_processed = 0
-            requirement_id_mapping = {}
-            # First pass: Create parent requirements
+            req_obj_by_excel_id = {}
+            # First pass: Create all requirements (ignore parent-child for now)
             for _, row in df.iterrows():
-                if pd.isna(row.get('Parent ID')) or row.get('Parent ID') == '':
-                    requirement = Requirement(
-                        requirement_id=str(row.get('Requirement ID', f'REQ_{uuid.uuid4().hex[:8]}')),
-                        title=str(row.get('Title', '')),
-                        description=str(row.get('Description', '')),
-                        status=str(row.get('Status', 'Draft')),
-                        group_id=group.id,
-                        parent_id=None,
-                        created_by=current_user,
-                        updated_by=current_user
-                    )
-                    db.session.add(requirement)
-                    db.session.flush()
-                    history = CellHistory(
-                        requirement_id=requirement.id,
-                        field_name='created',
-                        old_value=None,
-                        new_value=requirement.requirement_id,
-                        changed_by=current_user
-                    )
-                    db.session.add(history)
-                    requirement_id_mapping[row.get('Requirement ID')] = requirement.id
-                    records_processed += 1
-            # Second pass: Create child requirements
+                req_id = str(row.get('Requirement ID', f'REQ_{uuid.uuid4().hex[:8]}'))
+                requirement = Requirement(
+                    requirement_id=req_id,
+                    title=str(row.get('Title', '')),
+                    description=str(row.get('Description', '')),
+                    status=str(row.get('Status', 'Draft')),
+                    group_id=group.id,
+                    created_by=current_user,
+                    updated_by=current_user
+                )
+                db.session.add(requirement)
+                db.session.flush()
+                history = CellHistory(
+                    requirement_id=requirement.id,
+                    field_name='created',
+                    old_value=None,
+                    new_value=requirement.requirement_id,
+                    changed_by=current_user
+                )
+                db.session.add(history)
+                req_obj_by_excel_id[row.get('Requirement ID')] = requirement
+                records_processed += 1
+            db.session.flush()
+            # Second pass: Create M2M parent-child links
             for _, row in df.iterrows():
-                parent_requirement_id = row.get('Parent ID')
-                if not pd.isna(parent_requirement_id) and parent_requirement_id != '':
-                    if parent_requirement_id in requirement_id_mapping:
-                        requirement = Requirement(
-                            requirement_id=str(row.get('Requirement ID', f'REQ_{uuid.uuid4().hex[:8]}')),
-                            title=str(row.get('Title', '')),
-                            description=str(row.get('Description', '')),
-                            status=str(row.get('Status', 'Draft')),
-                            group_id=group.id,
-                            parent_id=requirement_id_mapping[parent_requirement_id],
-                            created_by=current_user,
-                            updated_by=current_user
-                        )
-                        db.session.add(requirement)
-                        db.session.flush()
-                        history = CellHistory(
-                            requirement_id=requirement.id,
-                            field_name='created',
-                            old_value=None,
-                            new_value=requirement.requirement_id,
-                            changed_by=current_user
-                        )
-                        db.session.add(history)
-                        records_processed += 1
-            os.remove(filepath)
+                parent_excel_id = row.get('Parent ID')
+                child_excel_id = row.get('Requirement ID')
+                if parent_excel_id and parent_excel_id in req_obj_by_excel_id and child_excel_id in req_obj_by_excel_id:
+                    child = req_obj_by_excel_id[child_excel_id]
+                    parent = req_obj_by_excel_id[parent_excel_id]
+                    if parent not in child.parents:
+                        child.parents.append(parent)
             db.session.commit()
+            os.remove(filepath)
             return jsonify({
                 'success': True,
                 'message': f'Successfully processed {records_processed} requirements',
@@ -681,17 +678,12 @@ def batch_update_requirements():
 
 @app.route('/api/requirements/graph', methods=['GET'])
 def get_requirements_graph():
-    """Get requirements data formatted for graph visualization"""
+    """Get requirements data formatted for graph visualization (many-to-many)"""
     try:
-        # Get all requirements with their relationships
         requirements = Requirement.query.all()
-        
-        # Format data for Vis.js network
         nodes = []
         edges = []
-        
         for req in requirements:
-            # Create node
             node = {
                 'id': req.id,
                 'label': f"{req.requirement_id}\n{req.title[:50]}{'...' if len(req.title) > 50 else ''}",
@@ -705,29 +697,25 @@ def get_requirements_graph():
                 'x': req.graph_x,
                 'y': req.graph_y
             }
-            
             # Set node color based on status
             if req.status == 'Completed':
-                node['color'] = '#28a745'  # Green
+                node['color'] = '#28a745'
             elif req.status == 'In Progress':
-                node['color'] = '#007bff'  # Blue
+                node['color'] = '#007bff'
             elif req.status == 'Review':
-                node['color'] = '#ffc107'  # Yellow
-            else:  # Draft
-                node['color'] = '#6c757d'  # Gray
-                
+                node['color'] = '#ffc107'
+            else:
+                node['color'] = '#6c757d'
             nodes.append(node)
-            
-            # Create edge if there's a parent relationship
-            if req.parent_id:
+            # Add edges for all parent links
+            for parent in req.parents:
                 edges.append({
-                    'from': req.parent_id,
+                    'from': parent.id,
                     'to': req.id,
                     'arrows': 'to',
                     'color': '#666',
                     'width': 2
                 })
-        
         return jsonify({
             'success': True,
             'data': {
@@ -736,56 +724,62 @@ def get_requirements_graph():
             }
         })
     except Exception as e:
+        print(f"[DEBUG] Exception in get_requirements_graph: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/requirements/<requirement_id>/parent', methods=['POST'])
 def set_requirement_parent(requirement_id):
-    """Set parent-child relationship between requirements"""
+    """Set or remove a parent-child relationship (many-to-many)"""
     try:
         data = request.json
         parent_id = data.get('parent_id')
-        
-        requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
-        if not requirement:
+        remove_only = data.get('remove_only', False)
+        print(f"[DEBUG] Received parent-child update: child requirement_id={requirement_id}, parent_id={parent_id}, remove_only={remove_only}")
+        child = Requirement.query.filter_by(requirement_id=requirement_id).first()
+        print(f"[DEBUG] Resolved child requirement: {child}")
+        if not child:
+            print("[DEBUG] Child requirement not found")
             return jsonify({'success': False, 'error': 'Requirement not found'}), 404
-        
-        # Validate parent exists if provided
         if parent_id:
             parent = Requirement.query.filter_by(requirement_id=parent_id).first()
+            print(f"[DEBUG] Resolved parent requirement: {parent}")
             if not parent:
+                print("[DEBUG] Parent requirement not found")
                 return jsonify({'success': False, 'error': 'Parent requirement not found'}), 404
-            
-            # Prevent circular references
-            if parent_id == requirement.requirement_id:
+            if remove_only:
+                # Remove only this parent-child link
+                print(f"[DEBUG] Current parents of child before removal: {[p.requirement_id for p in child.parents]}")
+                if parent in child.parents:
+                    child.parents.remove(parent)
+                    db.session.commit()
+                    print(f"[DEBUG] Removed parent-child link: {parent_id} -> {requirement_id}")
+                    return jsonify({'success': True, 'message': 'Parent relationship deleted'})
+                else:
+                    print(f"[DEBUG] Link does not exist: {parent_id} -> {requirement_id} (idempotent delete)")
+                    # Always return success for idempotent delete
+                    return jsonify({'success': True, 'message': 'Parent relationship already deleted'})
+            # Prevent self-link
+            if parent.id == child.id:
+                print("[DEBUG] Attempted to set requirement as its own parent")
                 return jsonify({'success': False, 'error': 'Cannot set requirement as its own parent'}), 400
-            
-            # Check if this would create a circular reference
-            def has_circular_reference(child_id, target_parent_id):
-                if child_id == target_parent_id:
-                    return True
-                child = Requirement.query.filter_by(requirement_id=child_id).first()
-                if child and child.parent_id:
-                    return has_circular_reference(child.parent_id, target_parent_id)
-                return False
-            
-            if has_circular_reference(parent_id, requirement.requirement_id):
-                return jsonify({'success': False, 'error': 'This would create a circular reference'}), 400
-            
-            requirement.parent_id = parent.id
+            # Prevent duplicate link
+            if parent not in child.parents:
+                child.parents.append(parent)
+                db.session.commit()
+                print(f"[DEBUG] Added parent-child link: {parent_id} -> {requirement_id}")
+                return jsonify({'success': True, 'message': 'Parent relationship added'})
+            else:
+                print(f"[DEBUG] Link already exists: {parent_id} -> {requirement_id}")
+                return jsonify({'success': True, 'message': 'Link already exists'})
         else:
-            requirement.parent_id = None
-        
-        requirement.updated_at = datetime.utcnow()
-        requirement.updated_by = get_current_user()
-        
-        db.session.commit()
-        
-        return jsonify({
-            'success': True,
-            'message': 'Parent relationship updated successfully'
-        })
+            # Remove all parent links for this child
+            child.parents = []
+            db.session.commit()
+            print(f"[DEBUG] Removed all parent links for child: {requirement_id}")
+            return jsonify({'success': True, 'message': 'All parent relationships removed'})
     except Exception as e:
         db.session.rollback()
+        print(f"[DEBUG] Exception in set_requirement_parent: {e}")
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/requirements/<requirement_id>/position', methods=['POST'])

@@ -747,11 +747,14 @@ async function showRequirementDetails(requirementId) {
                         }
                     </div>
                     <div class="col-md-6">
-                        <h6>Parent</h6>
-                        ${req.parent_id ? 
-                            `<div class="tree-node">
-                                <strong>${req.parent_id}</strong>
-                            </div>` : 
+                        <h6>Parents (${req.parent_objs.length})</h6>
+                        ${req.parent_objs.length > 0 ?
+                            req.parent_objs.map(parent => `
+                                <div class="tree-node">
+                                    <strong>${parent.requirement_id}</strong><br>
+                                    <small>${parent.title}</small>
+                                </div>
+                            `).join('') :
                             '<p class="text-muted">No parent</p>'
                         }
                     </div>
@@ -1291,6 +1294,27 @@ let network = null;
 let graphData = { nodes: [], edges: [] };
 let selectedNode = null;
 let isCtrlPressed = false;
+let selectedRequirementId = null; // Store requirement_id for parent-child logic
+let selectedNodeHighlight = null; // Store Vis.js nodeId for highlight
+let selectedEdge = null; // Track selected edge for deletion
+
+// Register Delete key event handler ONCE for edge deletion after DOM is loaded
+window.addEventListener('DOMContentLoaded', function() {
+    if (!window._deleteEdgeHandlerRegistered) {
+        document.addEventListener('keydown', async function(e) {
+            if (e.key === 'Delete' && selectedEdge) {
+                // Find parent and child requirement_id from node IDs
+                const parentNode = graphData.nodes.find(n => n.id === selectedEdge.from);
+                const childNode = graphData.nodes.find(n => n.id === selectedEdge.to);
+                if (parentNode && childNode) {
+                    await removeParentChildLink(parentNode.requirement_id, childNode.requirement_id);
+                    selectedEdge = null;
+                }
+            }
+        });
+        window._deleteEdgeHandlerRegistered = true;
+    }
+});
 
 // Graph functions
 async function loadGraph() {
@@ -1374,15 +1398,41 @@ function initializeGraph() {
         if (params.nodes.length > 0) {
             const nodeId = params.nodes[0];
             const node = nodes.get(nodeId);
-            
-            if (isCtrlPressed && selectedNode && selectedNode !== nodeId) {
-                // Create or remove parent-child relationship
-                handleParentChildRelationship(selectedNode, nodeId);
+            if (isCtrlPressed) {
+                if (selectedRequirementId && selectedRequirementId !== node.requirement_id) {
+                    // Second node selected, trigger relationship
+                    console.log('Ctrl+click: parent requirement_id:', selectedRequirementId, 'child requirement_id:', node.requirement_id);
+                    handleParentChildRelationship(selectedRequirementId, node.requirement_id);
+                    // Remove highlight from first node
+                    if (selectedNodeHighlight) {
+                        network.body.nodes[selectedNodeHighlight].setOptions({ color: undefined });
+                        selectedNodeHighlight = null;
+                    }
+                    selectedRequirementId = null;
+                } else {
+                    // First node selected or same node clicked again
+                    selectedRequirementId = node.requirement_id;
+                    // Debug: log first node selection
+                    console.log('Ctrl+click: first node selected, requirement_id:', node.requirement_id);
+                    // Highlight the selected node
+                    if (selectedNodeHighlight) {
+                        network.body.nodes[selectedNodeHighlight].setOptions({ color: undefined });
+                    }
+                    network.body.nodes[nodeId].setOptions({ color: { background: '#ffe066' } });
+                    selectedNodeHighlight = nodeId;
+                }
+                // Suppress details modal when Ctrl is pressed
+                return;
             } else {
                 // Show requirement details
                 showRequirementDetails(node.requirement_id);
+                // Remove highlight if any
+                if (selectedNodeHighlight) {
+                    network.body.nodes[selectedNodeHighlight].setOptions({ color: undefined });
+                    selectedNodeHighlight = null;
+                }
+                selectedRequirementId = null;
             }
-            selectedNode = null;
         }
     });
     
@@ -1414,44 +1464,44 @@ function initializeGraph() {
         }
     });
     
-    // Save positions when nodes are dragged
-    network.on('dragEnd', function(params) {
-        if (params.nodes.length > 0) {
-            const nodeId = params.nodes[0];
-            const node = nodes.get(nodeId);
-            const position = network.getPositions([nodeId])[nodeId];
-            
-            if (position && node) {
-                saveNodePosition(node.requirement_id, position.x, position.y);
-            }
+    // Track selected edge
+    network.on('selectEdge', function(params) {
+        if (params.edges.length > 0) {
+            selectedEdge = edges.get(params.edges[0]);
+            console.log('Selected edge:', selectedEdge);
+        } else {
+            selectedEdge = null;
         }
+    });
+    network.on('deselectEdge', function() {
+        selectedEdge = null;
     });
 }
 
-async function handleParentChildRelationship(parentId, childId) {
+async function handleParentChildRelationship(parentRequirementId, childRequirementId) {
     try {
-        const parentNode = graphData.nodes.find(n => n.id === parentId);
-        const childNode = graphData.nodes.find(n => n.id === childId);
+        const parentNode = graphData.nodes.find(n => n.requirement_id === parentRequirementId);
+        const childNode = graphData.nodes.find(n => n.requirement_id === childRequirementId);
         
         if (!parentNode || !childNode) {
             showAlert('Invalid node selection', 'warning');
+            console.log('Invalid node selection:', { parentRequirementId, childRequirementId, parentNode, childNode });
             return;
         }
-        
         // Check if relationship already exists
-        const existingEdge = graphData.edges.find(e => e.from === parentId && e.to === childId);
-        
+        const existingEdge = graphData.edges.find(e => e.from === parentNode.id && e.to === childNode.id);
         if (existingEdge) {
-            // Remove relationship
-            const response = await fetch(`/api/requirements/${childNode.requirement_id}/parent`, {
+            // Debug: log removal payload
+            console.log('Removing parent-child relationship:', { childRequirementId, parent_id: null });
+            const response = await fetch(`/api/requirements/${childRequirementId}/parent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
                 body: JSON.stringify({ parent_id: null })
             });
-            
             const data = await response.json();
+            console.log('Backend response (remove relationship):', data);
             if (data.success) {
                 showAlert('Parent-child relationship removed', 'success');
                 await loadGraph(); // Refresh graph
@@ -1459,16 +1509,17 @@ async function handleParentChildRelationship(parentId, childId) {
                 showAlert(data.error || 'Error removing relationship', 'danger');
             }
         } else {
-            // Create relationship
-            const response = await fetch(`/api/requirements/${childNode.requirement_id}/parent`, {
+            // Debug: log creation payload
+            console.log('Creating parent-child relationship:', { childRequirementId, parent_id: parentRequirementId });
+            const response = await fetch(`/api/requirements/${childRequirementId}/parent`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json'
                 },
-                body: JSON.stringify({ parent_id: parentNode.requirement_id })
+                body: JSON.stringify({ parent_id: parentRequirementId })
             });
-            
             const data = await response.json();
+            console.log('Backend response (create relationship):', data);
             if (data.success) {
                 showAlert('Parent-child relationship created', 'success');
                 await loadGraph(); // Refresh graph
@@ -1479,6 +1530,30 @@ async function handleParentChildRelationship(parentId, childId) {
     } catch (error) {
         console.error('Error handling parent-child relationship:', error);
         showAlert('Error updating relationship', 'danger');
+    }
+}
+
+async function removeParentChildLink(parentRequirementId, childRequirementId) {
+    try {
+        // Custom endpoint: remove only this parent-child link
+        const response = await fetch(`/api/requirements/${childRequirementId}/parent`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ parent_id: parentRequirementId, remove_only: true })
+        });
+        const data = await response.json();
+        if (data.success) {
+            showAlert('Parent-child relationship deleted', 'success');
+            await loadGraph();
+        } else {
+            showAlert(data.error || 'Error deleting relationship', 'danger');
+            // Do not refresh the graph if deletion failed
+        }
+    } catch (error) {
+        console.error('Error deleting parent-child relationship:', error);
+        showAlert('Error deleting relationship', 'danger');
     }
 }
 

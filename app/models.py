@@ -2,6 +2,7 @@ from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
+from sqlalchemy.orm import relationship
 
 from app.db import db
 
@@ -75,6 +76,13 @@ class Group(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+# Association table for many-to-many parent-child links
+requirement_links = db.Table(
+    'requirement_links',
+    db.Column('parent_id', db.String(36), db.ForeignKey('requirements.id'), primary_key=True),
+    db.Column('child_id', db.String(36), db.ForeignKey('requirements.id'), primary_key=True)
+)
+
 class Requirement(db.Model):
     """Requirement model with parent-child relationships within groups"""
     __tablename__ = 'requirements'
@@ -85,7 +93,7 @@ class Requirement(db.Model):
     description = db.Column(db.Text)
     status = db.Column(db.String(50), default='Draft')
     group_id = db.Column(db.String(36), db.ForeignKey('groups.id'), nullable=False, index=True)
-    parent_id = db.Column(db.String(36), db.ForeignKey('requirements.id'), index=True)
+    parent_id = db.Column(db.String(36), db.ForeignKey('requirements.id'), index=True)  # Deprecated, ignore in logic
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = db.Column(db.String(100))
@@ -93,6 +101,15 @@ class Requirement(db.Model):
     chapter = db.Column(db.String(100))
     graph_x = db.Column(db.Float, nullable=True)  # X position in graph
     graph_y = db.Column(db.Float, nullable=True)  # Y position in graph
+    
+    # Many-to-many parent-child relationships
+    parents = relationship(
+        'Requirement',
+        secondary=requirement_links,
+        primaryjoin=id==requirement_links.c.child_id,
+        secondaryjoin=id==requirement_links.c.parent_id,
+        backref='children_m2m'
+    )
     
     # Self-referential relationship for parent-child (within same group)
     children = db.relationship(
@@ -116,8 +133,14 @@ class Requirement(db.Model):
             'chapter': self.chapter,
             'group_id': self.group_id,
             'group_name': self.group_obj.name if self.group_obj else None,
-            'parent_id': self.parent_id,
-            'children_count': self.children.count(),
+            'parent_id': self.parent_id,  # Deprecated
+            'parents': [p.requirement_id for p in self.parents],
+            'parent_objs': [
+                {'requirement_id': p.requirement_id, 'title': p.title}
+                for p in self.parents
+            ],
+            'children': [c.to_dict() for c in self.children_m2m],
+            'children_count': len(self.children_m2m),
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'created_by': self.created_by,
