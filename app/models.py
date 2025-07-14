@@ -91,6 +91,8 @@ class Requirement(db.Model):
     created_by = db.Column(db.String(100))
     updated_by = db.Column(db.String(100))
     chapter = db.Column(db.String(100))
+    graph_x = db.Column(db.Float, nullable=True)  # X position in graph
+    graph_y = db.Column(db.Float, nullable=True)  # Y position in graph
     
     # Self-referential relationship for parent-child (within same group)
     children = db.relationship(
@@ -119,7 +121,9 @@ class Requirement(db.Model):
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
             'created_by': self.created_by,
-            'updated_by': self.updated_by
+            'updated_by': self.updated_by,
+            'graph_x': self.graph_x,
+            'graph_y': self.graph_y
         }
 
 class CellHistory(db.Model):

@@ -154,38 +154,52 @@ async function logout() {
 
 // Setup event listeners
 function setupEventListeners() {
-    // File upload
+    // File upload - only if elements exist
     const fileInput = document.getElementById('excel-file');
     const uploadArea = document.getElementById('upload-area');
     
-    fileInput.addEventListener('change', handleFileUpload);
+    if (fileInput) {
+        fileInput.addEventListener('change', handleFileUpload);
+    }
     
-    // Drag and drop
-    uploadArea.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        uploadArea.style.borderColor = '#667eea';
-    });
+    if (uploadArea) {
+        uploadArea.addEventListener('dragover', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#667eea';
+        });
+        uploadArea.addEventListener('dragleave', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#dee2e6';
+        });
+        uploadArea.addEventListener('drop', (e) => {
+            e.preventDefault();
+            uploadArea.style.borderColor = '#dee2e6';
+            const files = e.dataTransfer.files;
+            if (files.length > 0 && fileInput) {
+                fileInput.files = files;
+                handleFileUpload();
+            }
+        });
+    }
     
-    uploadArea.addEventListener('dragleave', (e) => {
-        e.preventDefault();
-        uploadArea.style.borderColor = '#dee2e6';
-    });
+    // Search and filters - only if elements exist
+    const searchInput = document.getElementById('search-input');
+    const statusFilter = document.getElementById('status-filter');
+    const chapterFilter = document.getElementById('chapter-filter');
+    const groupFilter = document.getElementById('group-filter');
     
-    uploadArea.addEventListener('drop', (e) => {
-        e.preventDefault();
-        uploadArea.style.borderColor = '#dee2e6';
-        const files = e.dataTransfer.files;
-        if (files.length > 0) {
-            fileInput.files = files;
-            handleFileUpload();
-        }
-    });
-    
-    // Search and filters
-    document.getElementById('search-input').addEventListener('input', filterRequirements);
-    document.getElementById('status-filter').addEventListener('change', filterRequirements);
-    document.getElementById('chapter-filter').addEventListener('change', filterRequirements);
-    document.getElementById('group-filter').addEventListener('change', filterRequirements);
+    if (searchInput) {
+        searchInput.addEventListener('input', filterRequirements);
+    }
+    if (statusFilter) {
+        statusFilter.addEventListener('change', filterRequirements);
+    }
+    if (chapterFilter) {
+        chapterFilter.addEventListener('change', filterRequirements);
+    }
+    if (groupFilter) {
+        groupFilter.addEventListener('change', filterRequirements);
+    }
     
     // Modal cleanup for EasyMDE
     const requirementModal = document.getElementById('requirementModal');
@@ -223,6 +237,9 @@ function showSection(sectionName) {
         case 'requirements':
             loadGroups();
             loadRequirements();
+            break;
+        case 'graph':
+            loadGraph();
             break;
     }
 }
@@ -978,7 +995,8 @@ async function loadUploadGroupOptions() {
         const response = await fetch('/api/groups');
         const data = await response.json();
         if (data.success) {
-            const groupSelect = document.getElementById('upload-group-id');
+            const groupSelect = document.getElementById('excel-upload-group');
+            if (!groupSelect) return; // Null check
             groupSelect.innerHTML = '<option value="">Select a group</option>';
             function addGroupOptions(groups, level = 0) {
                 groups.forEach(group => {
@@ -1267,3 +1285,230 @@ async function handleExcelUploadModal() {
     fileInput.value = '';
     document.getElementById('excel-upload-filename').textContent = '';
 } 
+
+// Graph Visualization using Vis.js
+let network = null;
+let graphData = { nodes: [], edges: [] };
+let selectedNode = null;
+let isCtrlPressed = false;
+
+// Graph functions
+async function loadGraph() {
+    try {
+        const response = await fetch('/api/requirements/graph');
+        const data = await response.json();
+        
+        if (data.success) {
+            graphData = data.data;
+            initializeGraph();
+        } else {
+            showAlert(data.error || 'Error loading graph data', 'danger');
+        }
+    } catch (error) {
+        console.error('Error loading graph:', error);
+        showAlert('Error loading graph data', 'danger');
+    }
+}
+
+function initializeGraph() {
+    const container = document.getElementById('graph-container');
+    if (!container) return;
+    
+    // Clear existing network
+    if (network) {
+        network.destroy();
+    }
+    
+    // Create nodes dataset
+    const nodes = new vis.DataSet(graphData.nodes.map(node => ({
+        ...node,
+        shape: 'box',
+        font: {
+            size: 12,
+            face: 'Arial'
+        },
+        borderWidth: 2,
+        shadow: true,
+        margin: 10
+    })));
+    
+    // Create edges dataset
+    const edges = new vis.DataSet(graphData.edges);
+    
+    // Network options
+    const options = {
+        nodes: {
+            shape: 'box',
+            font: {
+                size: 12,
+                face: 'Arial'
+            },
+            borderWidth: 2,
+            shadow: true,
+            margin: 10
+        },
+        edges: {
+            width: 2,
+            color: { color: '#666', highlight: '#007bff' },
+            smooth: {
+                type: 'cubicBezier',
+                forceDirection: 'none'
+            }
+        },
+        physics: {
+            enabled: false  // Physics disabled permanently
+        },
+        interaction: {
+            hover: true,
+            tooltipDelay: 200,
+            zoomView: true,
+            dragView: true
+        }
+    };
+    
+    // Create network
+    network = new vis.Network(container, { nodes, edges }, options);
+    
+    // Event listeners
+    network.on('click', function(params) {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const node = nodes.get(nodeId);
+            
+            if (isCtrlPressed && selectedNode && selectedNode !== nodeId) {
+                // Create or remove parent-child relationship
+                handleParentChildRelationship(selectedNode, nodeId);
+            } else {
+                // Show requirement details
+                showRequirementDetails(node.requirement_id);
+            }
+            selectedNode = null;
+        }
+    });
+    
+    network.on('doubleClick', function(params) {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const node = nodes.get(nodeId);
+            showRequirementDetails(node.requirement_id);
+        }
+    });
+    
+    // Handle Ctrl key for parent-child relationship creation
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Control') {
+            isCtrlPressed = true;
+        }
+    });
+    
+    document.addEventListener('keyup', function(e) {
+        if (e.key === 'Control') {
+            isCtrlPressed = false;
+        }
+    });
+    
+    // Handle node selection for parent-child relationships
+    network.on('select', function(params) {
+        if (params.nodes.length > 0 && isCtrlPressed) {
+            selectedNode = params.nodes[0];
+        }
+    });
+    
+    // Save positions when nodes are dragged
+    network.on('dragEnd', function(params) {
+        if (params.nodes.length > 0) {
+            const nodeId = params.nodes[0];
+            const node = nodes.get(nodeId);
+            const position = network.getPositions([nodeId])[nodeId];
+            
+            if (position && node) {
+                saveNodePosition(node.requirement_id, position.x, position.y);
+            }
+        }
+    });
+}
+
+async function handleParentChildRelationship(parentId, childId) {
+    try {
+        const parentNode = graphData.nodes.find(n => n.id === parentId);
+        const childNode = graphData.nodes.find(n => n.id === childId);
+        
+        if (!parentNode || !childNode) {
+            showAlert('Invalid node selection', 'warning');
+            return;
+        }
+        
+        // Check if relationship already exists
+        const existingEdge = graphData.edges.find(e => e.from === parentId && e.to === childId);
+        
+        if (existingEdge) {
+            // Remove relationship
+            const response = await fetch(`/api/requirements/${childNode.requirement_id}/parent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ parent_id: null })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                showAlert('Parent-child relationship removed', 'success');
+                await loadGraph(); // Refresh graph
+            } else {
+                showAlert(data.error || 'Error removing relationship', 'danger');
+            }
+        } else {
+            // Create relationship
+            const response = await fetch(`/api/requirements/${childNode.requirement_id}/parent`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({ parent_id: parentNode.requirement_id })
+            });
+            
+            const data = await response.json();
+            if (data.success) {
+                showAlert('Parent-child relationship created', 'success');
+                await loadGraph(); // Refresh graph
+            } else {
+                showAlert(data.error || 'Error creating relationship', 'danger');
+            }
+        }
+    } catch (error) {
+        console.error('Error handling parent-child relationship:', error);
+        showAlert('Error updating relationship', 'danger');
+    }
+}
+
+function refreshGraph() {
+    loadGraph();
+}
+
+function fitGraph() {
+    if (network) {
+        network.fit();
+    }
+}
+
+async function saveNodePosition(requirementId, x, y) {
+    try {
+        const response = await fetch(`/api/requirements/${requirementId}/position`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({ x, y })
+        });
+        
+        const data = await response.json();
+        if (!data.success) {
+            console.error('Error saving position:', data.error);
+        }
+    } catch (error) {
+        console.error('Error saving node position:', error);
+    }
+}
+
+ 

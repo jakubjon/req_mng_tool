@@ -653,6 +653,7 @@ def batch_update_requirements():
                         requirement.group_id = updates['group_id']
                 
                 requirement.updated_at = datetime.utcnow()
+                requirement.updated_by = current_user
                 
                 # Add history entries for changes
                 for field_name, old_value, new_value in changes:
@@ -673,6 +674,142 @@ def batch_update_requirements():
             'success': True,
             'message': f'Successfully updated {updated_count} requirements',
             'updated_count': updated_count
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/requirements/graph', methods=['GET'])
+def get_requirements_graph():
+    """Get requirements data formatted for graph visualization"""
+    try:
+        # Get all requirements with their relationships
+        requirements = Requirement.query.all()
+        
+        # Format data for Vis.js network
+        nodes = []
+        edges = []
+        
+        for req in requirements:
+            # Create node
+            node = {
+                'id': req.id,
+                'label': f"{req.requirement_id}\n{req.title[:50]}{'...' if len(req.title) > 50 else ''}",
+                'title': req.title,
+                'requirement_id': req.requirement_id,
+                'status': req.status,
+                'group_name': req.group_obj.name if req.group_obj else 'Unknown',
+                'description': req.description,
+                'created_at': req.created_at.isoformat() if req.created_at else None,
+                'updated_at': req.updated_at.isoformat() if req.updated_at else None,
+                'x': req.graph_x,
+                'y': req.graph_y
+            }
+            
+            # Set node color based on status
+            if req.status == 'Completed':
+                node['color'] = '#28a745'  # Green
+            elif req.status == 'In Progress':
+                node['color'] = '#007bff'  # Blue
+            elif req.status == 'Review':
+                node['color'] = '#ffc107'  # Yellow
+            else:  # Draft
+                node['color'] = '#6c757d'  # Gray
+                
+            nodes.append(node)
+            
+            # Create edge if there's a parent relationship
+            if req.parent_id:
+                edges.append({
+                    'from': req.parent_id,
+                    'to': req.id,
+                    'arrows': 'to',
+                    'color': '#666',
+                    'width': 2
+                })
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'nodes': nodes,
+                'edges': edges
+            }
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/requirements/<requirement_id>/parent', methods=['POST'])
+def set_requirement_parent(requirement_id):
+    """Set parent-child relationship between requirements"""
+    try:
+        data = request.json
+        parent_id = data.get('parent_id')
+        
+        requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
+        if not requirement:
+            return jsonify({'success': False, 'error': 'Requirement not found'}), 404
+        
+        # Validate parent exists if provided
+        if parent_id:
+            parent = Requirement.query.filter_by(requirement_id=parent_id).first()
+            if not parent:
+                return jsonify({'success': False, 'error': 'Parent requirement not found'}), 404
+            
+            # Prevent circular references
+            if parent_id == requirement.requirement_id:
+                return jsonify({'success': False, 'error': 'Cannot set requirement as its own parent'}), 400
+            
+            # Check if this would create a circular reference
+            def has_circular_reference(child_id, target_parent_id):
+                if child_id == target_parent_id:
+                    return True
+                child = Requirement.query.filter_by(requirement_id=child_id).first()
+                if child and child.parent_id:
+                    return has_circular_reference(child.parent_id, target_parent_id)
+                return False
+            
+            if has_circular_reference(parent_id, requirement.requirement_id):
+                return jsonify({'success': False, 'error': 'This would create a circular reference'}), 400
+            
+            requirement.parent_id = parent.id
+        else:
+            requirement.parent_id = None
+        
+        requirement.updated_at = datetime.utcnow()
+        requirement.updated_by = get_current_user()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Parent relationship updated successfully'
+        })
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@app.route('/api/requirements/<requirement_id>/position', methods=['POST'])
+def update_requirement_position(requirement_id):
+    """Update requirement position in graph"""
+    try:
+        data = request.json
+        x = data.get('x')
+        y = data.get('y')
+        
+        requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
+        if not requirement:
+            return jsonify({'success': False, 'error': 'Requirement not found'}), 404
+        
+        requirement.graph_x = x
+        requirement.graph_y = y
+        requirement.updated_at = datetime.utcnow()
+        requirement.updated_by = get_current_user()
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Position updated successfully'
         })
     except Exception as e:
         db.session.rollback()

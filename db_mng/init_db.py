@@ -23,11 +23,11 @@ def init_database():
             print("✅ All tables created")
             
             # Create default group
-            default_group = Group(
-                name='Default',
-                description='Default group for requirements'
-            )
-            db.session.add(default_group)
+                default_group = Group(
+                    name='Default',
+                    description='Default group for requirements'
+                )
+                db.session.add(default_group)
             
             # Create default admin user
             admin_user = User(

@@ -10,6 +10,7 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
+    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
     <style>
         .sidebar {
             min-height: 100vh;
@@ -322,6 +323,11 @@
                                 <i class="fas fa-list me-2"></i>Requirements
                             </a>
                         </li>
+                        <li class="nav-item">
+                            <a class="nav-link text-white" href="#" onclick="showSection('graph')">
+                                <i class="fas fa-project-diagram me-2"></i>Graph View
+                            </a>
+                        </li>
                     </ul>
                     <div class="mt-4 d-flex flex-column align-items-start">
                         <span class="text-white-50 small">Active user:</span>
@@ -472,6 +478,49 @@
                                 </div>
                             </div>
                         <!-- </div> -->
+                    </div>
+                </div>
+
+                <!-- Graph Section -->
+                <div id="graph-section" class="section" style="display: none;">
+                    <div class="row mb-4">
+                        <div class="col-12 d-flex justify-content-between align-items-center">
+                            <h2><i class="fas fa-project-diagram me-2"></i>Graph View</h2>
+                            <div>
+                                <button class="btn btn-outline-primary me-2" onclick="refreshGraph()">
+                                    <i class="fas fa-sync-alt me-2"></i>Refresh
+                                </button>
+                                <button class="btn btn-outline-secondary me-2" onclick="fitGraph()">
+                                    <i class="fas fa-expand-arrows-alt me-2"></i>Fit View
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-12">
+                            <div class="card">
+                                <div class="card-body p-0">
+                                    <div id="graph-container" style="height: calc(100vh - 350px); width: 100%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row mt-3">
+                        <div class="col-12">
+                            <div class="alert alert-info">
+                                <i class="fas fa-info-circle me-2"></i>
+                                <strong>Graph Controls:</strong>
+                                <ul class="mb-0 mt-2">
+                                    <li>Click on a node to view requirement details</li>
+                                    <li>Drag nodes to move them around (positions are saved automatically)</li>
+                                    <li>Hold Ctrl and click two nodes to create/remove parent-child relationships</li>
+                                    <li>Use mouse wheel to zoom in/out</li>
+                                    <li>Drag the background to pan the view</li>
+                                </ul>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
