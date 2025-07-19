@@ -1,1 +1,0 @@
-# This file makes the db_mng directory a Python package 

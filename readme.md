@@ -1,6 +1,6 @@
 # Requirements Management Tool
 
-A Flask-based web application for managing requirements with hierarchical groups, Excel import/export, and Directus CMS integration.
+A Flask-based web application for managing requirements with hierarchical groups and Excel import/export.
 
 
 ## Requirements
@@ -37,12 +37,12 @@ A Flask-based web application for managing requirements with hierarchical groups
 req_mng_tool/
 ├── app/                    # Main application
 │   ├── app.py             # Flask application
-│   ├── models.py          # Database models
 │   ├── config.py          # Configuration
 │   ├── Dockerfile         # Docker configuration
 │   ├── requirements.txt   # Python dependencies
 │   ├── static/            # Static files (CSS, JS)
 │   └── templates/         # HTML templates
+├── db/                   # Shared database module and models
 ├── db_mng/                # Database management scripts
 │   ├── init_db.py         # Database initialization
 │   ├── reset_db.py        # Database reset
@@ -51,9 +51,10 @@ req_mng_tool/
 ├── setup-env.ps1         # Environment setup script
 └── uploads/              # File uploads directory
 ```
-- **`app/`**: Main application code and templates
-- **`db_mng/`**: Database management and utility scripts
-- **Root**: Configuration and orchestration files
+ - **`app/`**: Main application code and templates
+ - **`db/`**: Shared SQLAlchemy instance and ORM models
+ - **`db_mng/`**: Database management and utility scripts
+ - **Root**: Configuration and orchestration files
 
 ## Deployment Methods
 
@@ -62,12 +63,11 @@ req_mng_tool/
 **For production or complete containerized deployment:**
 
 ```bash
-# Start all services (Flask app, Directus, PostgreSQL)
+# Start all services (Flask app and PostgreSQL)
 docker-compose up --build
 
 # Access the application:
 # - Main app: http://localhost:5000
-# - Directus CMS: http://localhost:8055 (admin@admin.com / admin123)
 ```
 
 ### Method 2: Hybrid Deployment (Recommended for Development)
@@ -83,8 +83,8 @@ pip install -r app/requirements.txt
 # 2. Set environment variables
 .\setup-env.ps1
 
-# 3. Start database services only
-docker-compose up -d postgres directus
+# 3. Start database service only
+docker-compose up -d postgres
 
 # 4. Run Flask app locally
 python -m app.app
@@ -117,8 +117,7 @@ python -m db_mng.create_sample_excel
 Create a `.env` file or use `setup-env.ps1`:
 
 ```env
-DATABASE_URL=postgresql://directus:directus@localhost:5432/directus
-DIRECTUS_URL=http://localhost:8055
+DATABASE_URL=postgresql://reqmng:reqmng@localhost:5432/reqmng
 FLASK_ENV=development
 SECRET_KEY=your-secret-key
 ```
@@ -138,4 +137,21 @@ SECRET_KEY=your-secret-key
 docker-compose down -v
 docker-compose up --build
 ```
+
+
+## Railway Deployment
+
+A separate configuration is provided in the `railway/` directory for hosting the project on [Railway](https://railway.app/). The compose file in that folder builds the application from the project root and launches PostgreSQL alongside the Flask service.
+
+To deploy:
+
+```bash
+# Move into the deployment folder
+cd railway
+
+# Deploy via the Railway CLI
+railway up
+```
+
+Alternatively, connect the `railway/` folder to a Railway service via GitHub. Environment variables such as `DATABASE_URL` may be configured in the Railway dashboard.
 

@@ -1,46 +1,20 @@
-from flask import Flask, request, jsonify, send_file, render_template, session, redirect, url_for
-from flask_cors import CORS
-from flask_session import Session
+from flask import request, jsonify, send_file, render_template, session, redirect, url_for
 from werkzeug.utils import secure_filename
 import os
 import pandas as pd
 from datetime import datetime
 import uuid
 from dotenv import load_dotenv
-from app.db import db
-from app.models import Requirement, CellHistory, Group, User
+from app import create_app
+from db import db
+from db.models import Requirement, CellHistory, Group, User
 from app.config import config
 
 # Load environment variables
+app = create_app()
+
+# Load environment variables for this module as well
 load_dotenv()
-
-app = Flask(__name__)
-CORS(app)
-
-# Configuration
-app.config.from_object(config['development'])
-app.config['UPLOAD_FOLDER'] = 'uploads'
-app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
-app.config['SECRET_KEY'] = os.getenv('SECRET_KEY', 'your-secret-key-change-this')
-app.config['SESSION_TYPE'] = 'filesystem'
-Session(app)
-
-# Ensure upload folder exists
-os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-
-# Import db from models and initialize it
-db.init_app(app)
-
-# Directus configuration
-DIRECTUS_URL = os.getenv('DIRECTUS_URL', 'http://localhost:8055')
-DIRECTUS_TOKEN = os.getenv('DIRECTUS_TOKEN')
-
-# Directus API helper functions
-def get_directus_headers():
-    return {
-        'Authorization': f'Bearer {DIRECTUS_TOKEN}',
-        'Content-Type': 'application/json'
-    }
 
 def get_current_user():
     """Get current user from session"""
