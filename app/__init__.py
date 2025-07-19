@@ -3,12 +3,13 @@
 from flask import Flask
 from flask_cors import CORS
 from flask_session import Session
+from flask_sqlalchemy import SQLAlchemy
 import os
 from dotenv import load_dotenv
 
 from .config import config
-from db import db, init_app as init_db
 
+db = SQLAlchemy()
 
 def create_app(config_name: str = "development") -> Flask:
     """Create and configure a Flask application."""
@@ -25,6 +26,9 @@ def create_app(config_name: str = "development") -> Flask:
     Session(app)
     os.makedirs(app.config["UPLOAD_FOLDER"], exist_ok=True)
 
-    init_db(app)
+
+    db.init_app(app)
+    with app.app_context():
+        db.create_all()
     return app
 

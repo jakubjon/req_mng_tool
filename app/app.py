@@ -5,10 +5,10 @@ import pandas as pd
 from datetime import datetime
 import uuid
 from dotenv import load_dotenv
-from app import create_app
-from db import db
-from db.models import Requirement, CellHistory, Group, User
-from app.config import config
+from . import create_app
+from app import db
+from app.models import Requirement, CellHistory, Group, User
+
 
 # Load environment variables
 app = create_app()
@@ -43,14 +43,14 @@ def index():
     """Serve the main application interface"""
     # If no users exist, redirect to login for registration
     if not users_exist():
-        return redirect(url_for('login'))
+        return redirect(url_for('login_page'))
     if 'user_id' not in session:
-        return redirect(url_for('login'))
+        return redirect(url_for('login_page'))
     # Defensive: check if user_id is valid
     user = User.query.get(session['user_id'])
     if not user:
         session.pop('user_id', None)
-        return redirect(url_for('login'))
+        return redirect(url_for('login_page'))
     return render_template('index.html')
 
 @app.route('/login')

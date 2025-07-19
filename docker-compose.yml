@@ -2,7 +2,7 @@ services:
   flask-app:
     build:
       context: .
-      dockerfile: app/Dockerfile
+      dockerfile: Dockerfile
     ports:
       - "5000:5000"
     environment:
@@ -11,7 +11,8 @@ services:
     volumes:
       - ./uploads:/app/uploads
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     networks:
       - req-mng-network
 
@@ -27,6 +28,11 @@ services:
       - postgres_data:/var/lib/postgresql/data
     networks:
       - req-mng-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U reqmng"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
 
 volumes:
   postgres_data:

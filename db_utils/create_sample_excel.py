@@ -3,15 +3,11 @@
 Script to create a sample Excel file with example requirements
 """
 import pandas as pd
-import uuid
 import os
 import sys
-from datetime import datetime
 
 # Allow importing models without loading the entire application
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-from db.models import Requirement, Group
 
 def create_sample_requirements():
     """Create sample requirements data"""

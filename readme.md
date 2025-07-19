@@ -38,22 +38,19 @@ req_mng_tool/
 ├── app/                    # Main application
 │   ├── app.py             # Flask application
 │   ├── config.py          # Configuration
-│   ├── Dockerfile         # Docker configuration
-│   ├── requirements.txt   # Python dependencies
+│   ├── models.py          # Database models
+│   ├── __init__.py        # App factory and DB setup
 │   ├── static/            # Static files (CSS, JS)
 │   └── templates/         # HTML templates
-├── db/                   # Shared database module and models
-├── db_mng/                # Database management scripts
-│   ├── init_db.py         # Database initialization
-│   ├── reset_db.py        # Database reset
+├── db_utils/              # Database utility scripts
 │   └── create_sample_excel.py # Sample data creation
 ├── docker-compose.yml     # Docker orchestration
-├── setup-env.ps1         # Environment setup script
+├── start_dev.bat          # Windows development script
+├── start_dev.sh           # Linux/macOS development script
 └── uploads/              # File uploads directory
 ```
- - **`app/`**: Main application code and templates
- - **`db/`**: Shared SQLAlchemy instance and ORM models
- - **`db_mng/`**: Database management and utility scripts
+ - **`app/`**: Main application code, templates, and database models
+ - **`db_utils/`**: Database utility scripts
  - **Root**: Configuration and orchestration files
 
 ## Deployment Methods
@@ -70,18 +67,39 @@ docker-compose up --build
 # - Main app: http://localhost:5000
 ```
 
-### Method 2: Hybrid Deployment (Recommended for Development)
+### Method 2: Hybrid Local Development (Recommended)
 
-**Flask app locally, database services in Docker:**
+You can run the Flask app locally and the database in Docker. Use the provided scripts for your OS:
 
+#### On **Windows**
+```bat
+start_dev.bat
+```
+- Activates the virtual environment
+- Sets environment variables
+- Starts the Postgres database via Docker Compose
+- Runs the Flask app
+
+#### On **Linux/macOS**
+```bash
+./start_dev.sh
+```
+- Activates the virtual environment
+- Sets environment variables
+- Starts the Postgres database via Docker Compose
+- Runs the Flask app
+
+**Manual steps (if you don't use the scripts):**
 ```bash
 # 1. Set up Python environment
 python3.11 -m venv venv
-.\venv\Scripts\Activate.ps1
-pip install -r app/requirements.txt
+source venv/bin/activate
+pip install -r requirements.txt
 
-# 2. Set environment variables
-.\setup-env.ps1
+# 2. Set environment variables (see .env.example)
+export DATABASE_URL=postgresql://reqmng:reqmng@localhost:5432/reqmng
+export FLASK_ENV=development
+export SECRET_KEY=your-secret-key
 
 # 3. Start database service only
 docker-compose up -d postgres
@@ -92,29 +110,9 @@ python -m app.app
 # Access: http://localhost:5000
 ```
 
-## Database Management
-
-### Initialize Database
-```bash
-# From project root
-python -m db_mng.init_db
-```
-
-### Reset Database
-```bash
-# From project root
-python -m db_mng.reset_db
-```
-
-### Create Sample Data
-```bash
-# From project root
-python -m db_mng.create_sample_excel
-```
-
 ## Environment Variables
 
-Create a `.env` file or use `setup-env.ps1`:
+Create a `.env` file or use the provided scripts. Example:
 
 ```env
 DATABASE_URL=postgresql://reqmng:reqmng@localhost:5432/reqmng
@@ -122,15 +120,13 @@ FLASK_ENV=development
 SECRET_KEY=your-secret-key
 ```
 
-
 ## Development
 
 ### Local Development Setup
 1. Use Method 2 (Hybrid Deployment)
 2. Make changes to files in `app/` directory
 3. Flask app auto-reloads on file changes
-4. Database changes require running init/reset scripts
-
+4. Database tables are auto-created on startup
 
 ### Reset Everything
 ```bash
@@ -138,20 +134,8 @@ docker-compose down -v
 docker-compose up --build
 ```
 
-
-## Railway Deployment
-
-A separate configuration is provided in the `railway/` directory for hosting the project on [Railway](https://railway.app/). The compose file in that folder builds the application from the project root and launches PostgreSQL alongside the Flask service.
-
-To deploy:
-
+### Rebuild image
 ```bash
-# Move into the deployment folder
-cd railway
-
-# Deploy via the Railway CLI
-railway up
+docker-compose up --build --force-recreate
 ```
-
-Alternatively, connect the `railway/` folder to a Railway service via GitHub. Environment variables such as `DATABASE_URL` may be configured in the Railway dashboard.
 

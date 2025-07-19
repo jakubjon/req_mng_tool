@@ -11,22 +11,16 @@ RUN apt-get update && apt-get install -y \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
-COPY app/requirements.txt .
+COPY requirements.txt .
 
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy application code
-COPY app/ .
-
-# Copy shared database module
-COPY db ./db/
-
-# Copy db_mng directory (will be copied from build context)
-COPY db_mng ./db_mng/
+COPY app/ ./app/
 
 # Copy entrypoint script
-COPY app/start.sh ./start.sh
+COPY start.sh ./start.sh
 RUN chmod +x start.sh
 
 # Create uploads directory
