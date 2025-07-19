@@ -105,10 +105,14 @@ def register():
         data = request.json
         username = data.get('username')
         password = data.get('password')
-        email = data.get('email')
+        email = data.get('email', '').strip()  # Get email and remove whitespace
         
         if not username or not password:
             return jsonify({'success': False, 'error': 'Username and password required'}), 400
+        
+        # Convert empty email to None to avoid unique constraint violations
+        if not email:
+            email = None
         
         # Check if user already exists
         if User.query.filter_by(username=username).first():
