@@ -8,11 +8,10 @@ import os
 import sys
 from datetime import datetime
 
-# Add the parent directory to the path so we can import from app
+# Allow importing models without loading the entire application
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app import app, db
-from app.models import Requirement, Group
+from db.models import Requirement, Group
 
 def create_sample_requirements():
     """Create sample requirements data"""

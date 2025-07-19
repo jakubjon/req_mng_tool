@@ -4,7 +4,7 @@ import uuid
 from werkzeug.security import generate_password_hash, check_password_hash
 from sqlalchemy.orm import relationship
 
-from app.db import db
+from . import db
 
 class User(db.Model):
     """User model for authentication"""

@@ -11,10 +11,6 @@ class Config:
         raise RuntimeError('DATABASE_URL environment variable must be set to a valid PostgreSQL URI')
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     
-    # Directus configuration
-    DIRECTUS_URL = os.environ.get('DIRECTUS_URL') or 'http://localhost:8055'
-    DIRECTUS_TOKEN = os.environ.get('DIRECTUS_TOKEN')
-    
     # File upload configuration
     UPLOAD_FOLDER = 'uploads'
     MAX_CONTENT_LENGTH = 16 * 1024 * 1024  # 16MB

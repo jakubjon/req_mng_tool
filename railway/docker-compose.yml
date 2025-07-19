@@ -1,7 +1,7 @@
 services:
   flask-app:
     build:
-      context: .
+      context: ..
       dockerfile: app/Dockerfile
     ports:
       - "5000:5000"
@@ -9,7 +9,7 @@ services:
       - FLASK_ENV=development
       - DATABASE_URL=postgresql://reqmng:reqmng@postgres:5432/reqmng
     volumes:
-      - ./uploads:/app/uploads
+      - ../uploads:/app/uploads
     depends_on:
       - postgres
     networks:

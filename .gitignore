@@ -25,5 +25,3 @@ logs/
 instance/
 flask_session/
 
-# Directus
-directus_data/ 

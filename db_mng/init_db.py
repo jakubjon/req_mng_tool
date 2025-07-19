@@ -10,9 +10,11 @@ import os
 # Add the parent directory to the Python path
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.app import app
-from app.db import db
-from app.models import Requirement, CellHistory, Group, User
+from app import create_app
+from db import db
+from db.models import Requirement, CellHistory, Group, User
+
+app = create_app()
 
 def init_database():
     """Initialize database with tables and sample data"""
@@ -23,11 +25,11 @@ def init_database():
             print("✅ All tables created")
             
             # Create default group
-                default_group = Group(
-                    name='Default',
-                    description='Default group for requirements'
-                )
-                db.session.add(default_group)
+            default_group = Group(
+                name='Default',
+                description='Default group for requirements'
+            )
+            db.session.add(default_group)
             
             # Create default admin user
             admin_user = User(
