@@ -6,6 +6,46 @@ from sqlalchemy.orm import relationship
 
 from app import db
 
+# Association table for user-project access (many-to-many)
+user_projects = db.Table(
+    'user_projects',
+    db.Column('user_id', db.String(36), db.ForeignKey('users.id'), primary_key=True),
+    db.Column('project_id', db.String(36), db.ForeignKey('projects.id'), primary_key=True)
+)
+
+class Project(db.Model):
+    """Project model - highest level classification"""
+    __tablename__ = 'projects'
+    
+    id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = db.Column(db.String(100))
+    
+    # Relationships
+    groups = db.relationship('Group', backref='project', lazy='dynamic', cascade='all, delete-orphan')
+    requirements = db.relationship('Requirement', backref='project', lazy='dynamic', cascade='all, delete-orphan')
+    users = db.relationship('User', secondary=user_projects, backref='projects')
+    
+    def __repr__(self):
+        return f'<Project {self.name}>'
+    
+    def to_dict(self):
+        """Convert project to dictionary"""
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'groups_count': self.groups.count(),
+            'requirements_count': self.requirements.count(),
+            'users_count': len(self.users),
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None,
+            'created_by': self.created_by
+        }
+
 class User(db.Model):
     """User model for authentication"""
     __tablename__ = 'users'
@@ -39,13 +79,14 @@ class User(db.Model):
         }
 
 class Group(db.Model):
-    """Group model with parent-child relationships"""
+    """Group model with parent-child relationships within projects"""
     __tablename__ = 'groups'
     
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    name = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    name = db.Column(db.String(100), nullable=False, index=True)
     description = db.Column(db.Text)
     parent_id = db.Column(db.String(36), db.ForeignKey('groups.id'), index=True)
+    project_id = db.Column(db.String(36), db.ForeignKey('projects.id'), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
@@ -70,6 +111,8 @@ class Group(db.Model):
             'name': self.name,
             'description': self.description,
             'parent_id': self.parent_id,
+            'project_id': self.project_id,
+            'project_name': self.project.name if self.project else None,
             'children_count': self.children.count(),
             'requirements_count': self.requirements.count(),
             'created_at': self.created_at.isoformat() if self.created_at else None,
@@ -84,15 +127,16 @@ requirement_links = db.Table(
 )
 
 class Requirement(db.Model):
-    """Requirement model with parent-child relationships within groups"""
+    """Requirement model with parent-child relationships within groups and projects"""
     __tablename__ = 'requirements'
     
     id = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    requirement_id = db.Column(db.String(100), unique=True, nullable=False, index=True)
+    requirement_id = db.Column(db.String(100), nullable=False, index=True)
     title = db.Column(db.String(500), nullable=False)
     description = db.Column(db.Text)
     status = db.Column(db.String(50), default='Draft')
     group_id = db.Column(db.String(36), db.ForeignKey('groups.id'), nullable=False, index=True)
+    project_id = db.Column(db.String(36), db.ForeignKey('projects.id'), nullable=False, index=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     created_by = db.Column(db.String(100))
@@ -110,14 +154,6 @@ class Requirement(db.Model):
         backref='children_m2m'
     )
     
-    # REMOVED: Self-referential relationship for parent-child (within same group)
-    # children = db.relationship(
-    #     'Requirement',
-    #     backref=db.backref('parent', remote_side=[id]),
-    #     cascade='all, delete-orphan',
-    #     lazy='dynamic'
-    # )
-    
     def __repr__(self):
         return f'<Requirement {self.requirement_id}: {self.title}>'
     
@@ -132,6 +168,8 @@ class Requirement(db.Model):
             'chapter': self.chapter,
             'group_id': self.group_id,
             'group_name': self.group_obj.name if self.group_obj else None,
+            'project_id': self.project_id,
+            'project_name': self.project.name if self.project else None,
             'parents': [p.requirement_id for p in self.parents],
             'parent_objs': [
                 {'requirement_id': p.requirement_id, 'title': p.title}

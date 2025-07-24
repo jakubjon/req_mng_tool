@@ -1,0 +1,18 @@
+Requirement ID,Title,Description
+REQ-001,Requirement Management,"Create requirements with unique IDs, titles, descriptions, status, chapter, and group assignment"
+REQ-002,Requirement Endpoints,Perform CRUD operations on individual or batches of requirements
+REQ-003,Hierarchical Requirements Management,Organize requirements in groups with parent-child relationships
+REQ-004,Change Tracking,"Log changes to requirement fields with user, timestamp, old and new values"
+REQ-005,Batch Operations,Support batch updates of requirements with field validation
+REQ-006,Text Field,Requiremnt text field shal support either markdown or WYSIWYG including pictures
+REQ-007,Chat,Each requirment shall have separate chat.
+REQ-008,Group Management,Manage hierarchical groups with parent-child relationships and track creation/update times
+REQ-009,Group Endpoints,"Create, update, retrieve, and delete groups via API"
+REQ-010,Excel Import/Export,Upload Excel files and export requirements
+REQ-011,User Management,"Register users and store usernames, hashed passwords, emails, active status, and timestamps"
+REQ-012,Authentication,Authenticate users via a login endpoint and assign session IDs
+REQ-013,User Interface,"Provide dashboard, searchable/filterable requirement table, graph view, and modals for editing"
+REQ-014,Graph Visualization,Display parent-child requirement links in a visual graph with status-based colors
+REQ-015,Node Positioning,Allow users to update and persist node positions via API
+REQ-016,Status automations,When req changed the status back to draft
+REQ-017,Req review process automation,System shall allow requrment review process by alloving selection of reviwer and allowinf status to change from draft to accepted only when all accepted.

@@ -3,6 +3,8 @@ let currentRequirementId = null;
 let requirementsData = [];
 let groupsData = [];
 let selectedRequirements = new Set(); // Track selected requirements for batch editing
+let currentProject = null; // Currently selected project
+let projectsData = []; // All projects accessible to current user
 
 // EasyMDE instance for requirement modal
 let reqDescriptionMDE = null;
@@ -65,12 +67,192 @@ function destroyReqDescriptionMDE() {
 // Initialize the application
 document.addEventListener('DOMContentLoaded', function() {
     loadCurrentUser();
-    loadDashboard();
+    loadProjects();
     setupEventListeners();
-    loadGroups(); // Ensure groupsData is loaded on page load
-    loadUploadGroupOptions();
     enableTableColumnResizing();
 });
+
+// Project Management Functions
+async function loadProjects() {
+    try {
+        const response = await fetch('/api/projects');
+        const result = await response.json();
+        
+        if (result.success) {
+            projectsData = result.data;
+            populateProjectSelector();
+            
+            // If user has projects, select the first one automatically
+            if (projectsData.length > 0) {
+                selectProject(projectsData[0].id);
+            } else {
+                // Show message if no projects available
+                showAlert('No projects available. Create your first project to get started.', 'info');
+            }
+        } else {
+            showAlert('Failed to load projects: ' + result.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Error loading projects:', error);
+        showAlert('Error loading projects', 'danger');
+    }
+}
+
+function populateProjectSelector() {
+    const selector = document.getElementById('project-selector');
+    selector.innerHTML = '<option value="">Select Project...</option>';
+    
+    projectsData.forEach(project => {
+        const option = document.createElement('option');
+        option.value = project.id;
+        option.textContent = project.name;
+        selector.appendChild(option);
+    });
+}
+
+function selectProject(projectId) {
+    if (!projectId) {
+        currentProject = null;
+        hideProjectInfo();
+        clearProjectData();
+        return;
+    }
+    
+    currentProject = projectsData.find(p => p.id === projectId);
+    if (!currentProject) return;
+    
+    // Update selector
+    document.getElementById('project-selector').value = projectId;
+    
+    // Show project info
+    showProjectInfo();
+    
+    // Load project data
+    loadProjectData();
+}
+
+function showProjectInfo() {
+    if (!currentProject) return;
+    
+    document.getElementById('project-name').textContent = currentProject.name;
+    document.getElementById('project-groups-count').textContent = currentProject.groups_count || 0;
+    document.getElementById('project-requirements-count').textContent = currentProject.requirements_count || 0;
+    document.getElementById('project-info').style.display = 'block';
+}
+
+function hideProjectInfo() {
+    document.getElementById('project-info').style.display = 'none';
+}
+
+function clearProjectData() {
+    requirementsData = [];
+    groupsData = [];
+    selectedRequirements.clear();
+    
+    // Clear UI
+    document.getElementById('requirements-table-body').innerHTML = '';
+    document.getElementById('total-requirements').textContent = '0';
+    document.getElementById('draft-requirements').textContent = '0';
+    document.getElementById('completed-requirements').textContent = '0';
+    document.getElementById('in-progress-requirements').textContent = '0';
+    
+    // Clear filters
+    document.getElementById('group-filter').innerHTML = '<option value="">All Groups</option>';
+    document.getElementById('chapter-filter').innerHTML = '<option value="">All Chapters</option>';
+}
+
+async function loadProjectData() {
+    if (!currentProject) return;
+    
+    // Load groups and requirements for the current project
+    await loadGroups();
+    await loadRequirements();
+    await loadDashboard();
+    loadUploadGroupOptions();
+}
+
+function showAddProjectModal() {
+    document.getElementById('project-modal-title').textContent = 'Create New Project';
+    document.getElementById('project-name-input').value = '';
+    document.getElementById('project-description').value = '';
+    
+    const modal = new bootstrap.Modal(document.getElementById('projectModal'));
+    modal.show();
+    
+    // Focus on the name input after modal is shown
+    setTimeout(() => {
+        const nameInput = document.getElementById('project-name-input');
+        if (nameInput) {
+            nameInput.focus();
+        }
+    }, 100);
+}
+
+async function saveProject() {
+    console.log('saveProject function called');
+    
+    const nameInput = document.getElementById('project-name-input');
+    const descriptionInput = document.getElementById('project-description');
+    
+    console.log('nameInput element:', nameInput);
+    console.log('descriptionInput element:', descriptionInput);
+    
+    if (!nameInput || !descriptionInput) {
+        console.error('Project form elements not found');
+        showAlert('Form elements not found', 'danger');
+        return;
+    }
+    
+    console.log('nameInput.value before trim:', nameInput.value);
+    console.log('descriptionInput.value before trim:', descriptionInput.value);
+    
+    const name = nameInput.value.trim();
+    const description = descriptionInput.value.trim();
+    
+    console.log('Project name after trim:', name, 'Length:', name.length);
+    console.log('Project description after trim:', description);
+    
+    if (!name) {
+        showAlert('Project name is required', 'warning');
+        return;
+    }
+    
+    try {
+        console.log('Sending project data:', { name, description });
+        
+        const response = await fetch('/api/projects', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                name: name,
+                description: description
+            })
+        });
+        
+        console.log('Response status:', response.status);
+        const result = await response.json();
+        console.log('Response data:', result);
+        
+        if (result.success) {
+            showAlert('Project created successfully', 'success');
+            
+            // Close modal
+            const modal = bootstrap.Modal.getInstance(document.getElementById('projectModal'));
+            modal.hide();
+            
+            // Reload projects and select the new one
+            await loadProjects();
+            selectProject(result.data.id);
+        } else {
+            showAlert('Failed to create project: ' + result.error, 'danger');
+        }
+    } catch (error) {
+        console.error('Error creating project:', error);
+        showAlert('Error creating project', 'danger');
+    }
+}
 
 function enableTableColumnResizing() {
     const table = document.querySelector('table');
@@ -154,6 +336,23 @@ async function logout() {
 
 // Setup event listeners
 function setupEventListeners() {
+    // Project selector event
+    const projectSelector = document.getElementById('project-selector');
+    if (projectSelector) {
+        projectSelector.addEventListener('change', function() {
+            selectProject(this.value);
+        });
+    }
+    
+    // Project form submission prevention
+    const projectForm = document.getElementById('project-form');
+    if (projectForm) {
+        projectForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            saveProject();
+        });
+    }
+    
     // File upload - only if elements exist
     const fileInput = document.getElementById('excel-file');
     const uploadArea = document.getElementById('upload-area');
@@ -246,8 +445,10 @@ function showSection(sectionName) {
 
 // Dashboard functions
 async function loadDashboard() {
+    if (!currentProject) return;
+    
     try {
-        const response = await fetch('/api/requirements');
+        const response = await fetch(`/api/requirements?project_id=${currentProject.id}`);
         const data = await response.json();
         
         if (data.success) {
@@ -273,14 +474,18 @@ async function loadDashboard() {
 
 // Group functions
 async function loadGroups() {
+    if (!currentProject) return;
+    
     try {
-        const response = await fetch('/api/groups');
+        const response = await fetch(`/api/groups?project_id=${currentProject.id}`);
         const data = await response.json();
         
         if (data.success) {
             groupsData = data.data;
             loadGroupOptions();
             populateGroupFilter(); // Ensure group filter is populated after groupsData is set
+        } else {
+            showAlert('Failed to load groups: ' + data.error, 'danger');
         }
     } catch (error) {
         console.error('Error loading groups:', error);
@@ -366,10 +571,16 @@ function editGroup(groupId) {
 }
 
 async function saveGroup() {
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
     const formData = {
         name: document.getElementById('group-name').value,
         description: document.getElementById('group-description').value,
-        parent_id: document.getElementById('group-parent-id').value || null
+        parent_id: document.getElementById('group-parent-id').value || null,
+        project_id: currentProject.id
     };
     
     const editGroupId = document.getElementById('groupModal').getAttribute('data-edit-group-id');
@@ -435,10 +646,12 @@ async function deleteGroup(groupId) {
 
 // Requirements functions
 async function loadRequirements(groupId = null) {
+    if (!currentProject) return;
+    
     try {
-        let url = '/api/requirements';
+        let url = `/api/requirements?project_id=${currentProject.id}`;
         if (groupId) {
-            url += `?group_id=${groupId}`;
+            url += `&group_id=${groupId}`;
         }
         
         const response = await fetch(url);
@@ -449,6 +662,8 @@ async function loadRequirements(groupId = null) {
             renderRequirementsTable(requirementsData);
             populateChapterFilter();
             populateGroupFilter();
+        } else {
+            showAlert('Failed to load requirements: ' + data.error, 'danger');
         }
     } catch (error) {
         console.error('Error loading requirements:', error);
@@ -585,12 +800,18 @@ function editRequirement(requirementId) {
 }
 
 async function saveRequirement() {
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
     const formData = {
         requirement_id: document.getElementById('req-id').value,
         title: document.getElementById('req-title').value,
         description: getReqDescriptionValue(),
         status: document.getElementById('req-status').value,
-        chapter: document.getElementById('chapter-field').value || null
+        chapter: document.getElementById('chapter-field').value || null,
+        project_id: currentProject.id
     };
     const groupId = document.getElementById('req-group-id').value;
     if (groupId) {
@@ -880,22 +1101,29 @@ async function handleFileUpload() {
 }
 
 // Export functions
-async function exportRequirements() {
+async function exportRequirements(format = 'excel') {
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
     try {
-        const response = await fetch('/api/export-excel');
+        const endpoint = format === 'csv' ? '/api/export-csv' : '/api/export-excel';
+        const response = await fetch(`${endpoint}?project_id=${currentProject.id}`);
         
         if (response.ok) {
             const blob = await response.blob();
             const url = window.URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `requirements_export_${new Date().toISOString().split('T')[0]}.xlsx`;
+            const extension = format === 'csv' ? 'csv' : 'xlsx';
+            a.download = `${currentProject.name}_requirements_export_${new Date().toISOString().split('T')[0]}.${extension}`;
             document.body.appendChild(a);
             a.click();
             window.URL.revokeObjectURL(url);
             document.body.removeChild(a);
             
-            showAlert('Requirements exported successfully', 'success');
+            showAlert(`Requirements exported successfully as ${format.toUpperCase()}`, 'success');
         } else {
             showAlert('Error exporting requirements', 'danger');
         }
@@ -967,8 +1195,10 @@ async function deleteRequirement(requirementId) {
 }
 
 async function loadUploadGroupOptions() {
+    if (!currentProject) return;
+    
     try {
-        const response = await fetch('/api/groups');
+        const response = await fetch(`/api/groups?project_id=${currentProject.id}`);
         const data = await response.json();
         if (data.success) {
             const groupSelect = document.getElementById('excel-upload-group');
@@ -1080,6 +1310,11 @@ function showBatchEditModal() {
 }
 
 async function saveBatchEdit() {
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
     const status = document.getElementById('batch-status').value;
     const chapter = document.getElementById('batch-chapter').value;
     const groupId = document.getElementById('batch-group-id').value;
@@ -1104,7 +1339,8 @@ async function saveBatchEdit() {
             },
             body: JSON.stringify({
                 requirement_ids: Array.from(selectedRequirements),
-                updates: updateData
+                updates: updateData,
+                project_id: currentProject.id
             })
         });
         
@@ -1144,8 +1380,39 @@ function showExcelUploadModal() {
     modal.show();
 }
 
+function showCsvUploadModal() {
+    // Reset modal state
+    document.getElementById('csv-upload-file').value = '';
+    document.getElementById('csv-upload-filename').textContent = '';
+    document.getElementById('add-group-inline-csv').style.display = 'none';
+    document.getElementById('new-group-name-csv').value = '';
+    // Populate group dropdown
+    populateCsvUploadGroupDropdown();
+    // Show modal
+    const modal = new bootstrap.Modal(document.getElementById('csvUploadModal'));
+    modal.show();
+}
+
 function populateExcelUploadGroupDropdown() {
     const groupSelect = document.getElementById('excel-upload-group');
+    groupSelect.innerHTML = '<option value="">Select a group</option>';
+    function addGroupOptions(groups, level = 0) {
+        groups.forEach(group => {
+            const indent = '\u00A0'.repeat(level * 4);
+            const option = document.createElement('option');
+            option.value = group.id;
+            option.innerHTML = indent + group.name;
+            groupSelect.appendChild(option);
+            if (group.children && group.children.length > 0) {
+                addGroupOptions(group.children, level + 1);
+            }
+        });
+    }
+    addGroupOptions(groupsData);
+}
+
+function populateCsvUploadGroupDropdown() {
+    const groupSelect = document.getElementById('csv-upload-group');
     groupSelect.innerHTML = '<option value="">Select a group</option>';
     function addGroupOptions(groups, level = 0) {
         groups.forEach(group => {
@@ -1191,6 +1458,35 @@ if (excelUploadArea) {
     });
 }
 
+// CSV drag-and-drop and file selection
+const csvUploadArea = document.getElementById('csv-upload-area');
+if (csvUploadArea) {
+    csvUploadArea.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        csvUploadArea.style.borderColor = '#667eea';
+    });
+    csvUploadArea.addEventListener('dragleave', (e) => {
+        e.preventDefault();
+        csvUploadArea.style.borderColor = '#dee2e6';
+    });
+    csvUploadArea.addEventListener('drop', (e) => {
+        e.preventDefault();
+        csvUploadArea.style.borderColor = '#dee2e6';
+        const files = e.dataTransfer.files;
+        if (files.length > 0) {
+            document.getElementById('csv-upload-file').files = files;
+            document.getElementById('csv-upload-filename').textContent = files[0].name;
+        }
+    });
+    document.getElementById('csv-upload-file').addEventListener('change', function() {
+        if (this.files.length > 0) {
+            document.getElementById('csv-upload-filename').textContent = this.files[0].name;
+        } else {
+            document.getElementById('csv-upload-filename').textContent = '';
+        }
+    });
+}
+
 function showAddGroupInline() {
     document.getElementById('add-group-inline').style.display = 'block';
     document.getElementById('new-group-name').focus();
@@ -1205,11 +1501,22 @@ async function addGroupInline() {
         showAlert('Group name cannot be empty', 'warning');
         return;
     }
+    
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
     try {
         const response = await fetch('/api/groups', {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'X-User-ID': 'current_user' },
-            body: JSON.stringify({ name })
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                name: name,
+                description: '',
+                parent_id: null,
+                project_id: currentProject.id
+            })
         });
         const data = await response.json();
         if (data.success) {
@@ -1226,7 +1533,60 @@ async function addGroupInline() {
     }
 }
 
+function showAddGroupInlineCsv() {
+    document.getElementById('add-group-inline-csv').style.display = 'block';
+    document.getElementById('new-group-name-csv').focus();
+}
+
+function hideAddGroupInlineCsv() {
+    document.getElementById('add-group-inline-csv').style.display = 'none';
+    document.getElementById('new-group-name-csv').value = '';
+}
+
+async function addGroupInlineCsv() {
+    const name = document.getElementById('new-group-name-csv').value.trim();
+    if (!name) {
+        showAlert('Group name cannot be empty', 'warning');
+        return;
+    }
+    
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
+    try {
+        const response = await fetch('/api/groups', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ 
+                name: name,
+                description: '',
+                parent_id: null,
+                project_id: currentProject.id
+            })
+        });
+        const data = await response.json();
+        if (data.success) {
+            showAlert('Group created successfully', 'success');
+            hideAddGroupInlineCsv();
+            await loadGroups(); // refresh groupsData
+            populateCsvUploadGroupDropdown();
+            document.getElementById('csv-upload-group').value = data.data.id;
+        } else {
+            showAlert(data.error || 'Error creating group', 'danger');
+        }
+    } catch (error) {
+        showAlert('Error creating group', 'danger');
+    }
+}
+
 async function handleExcelUploadModal() {
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
     const fileInput = document.getElementById('excel-upload-file');
     const groupId = document.getElementById('excel-upload-group').value;
     if (!fileInput.files.length) {
@@ -1241,6 +1601,7 @@ async function handleExcelUploadModal() {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('group_id', groupId);
+    formData.append('project_id', currentProject.id);
     try {
         const response = await fetch('/api/upload-excel', {
             method: 'POST',
@@ -1248,7 +1609,10 @@ async function handleExcelUploadModal() {
         });
         const data = await response.json();
         if (data.success) {
-            showAlert('Excel file uploaded successfully', 'success');
+            const message = data.data.records_skipped > 0 
+                ? `Excel file uploaded successfully. Processed: ${data.data.records_processed}, Skipped duplicates: ${data.data.records_skipped}`
+                : `Excel file uploaded successfully. Processed: ${data.data.records_processed} requirements`;
+            showAlert(message, 'success');
             bootstrap.Modal.getInstance(document.getElementById('excelUploadModal')).hide();
             loadRequirements();
             loadDashboard();
@@ -1260,6 +1624,51 @@ async function handleExcelUploadModal() {
     }
     fileInput.value = '';
     document.getElementById('excel-upload-filename').textContent = '';
+}
+
+async function handleCsvUploadModal() {
+    if (!currentProject) {
+        showAlert('No project selected', 'warning');
+        return;
+    }
+    
+    const fileInput = document.getElementById('csv-upload-file');
+    const groupId = document.getElementById('csv-upload-group').value;
+    if (!fileInput.files.length) {
+        showAlert('Please select a CSV file to upload.', 'warning');
+        return;
+    }
+    if (!groupId) {
+        showAlert('Please select a group for import.', 'warning');
+        return;
+    }
+    const file = fileInput.files[0];
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('group_id', groupId);
+    formData.append('project_id', currentProject.id);
+    try {
+        const response = await fetch('/api/upload-csv', {
+            method: 'POST',
+            body: formData
+        });
+        const data = await response.json();
+        if (data.success) {
+            const message = data.data.records_skipped > 0 
+                ? `CSV file uploaded successfully. Processed: ${data.data.records_processed}, Skipped duplicates: ${data.data.records_skipped}`
+                : `CSV file uploaded successfully. Processed: ${data.data.records_processed} requirements`;
+            showAlert(message, 'success');
+            bootstrap.Modal.getInstance(document.getElementById('csvUploadModal')).hide();
+            loadRequirements();
+            loadDashboard();
+        } else {
+            showAlert(data.error || 'Error uploading file', 'danger');
+        }
+    } catch (error) {
+        showAlert('Error uploading file', 'danger');
+    }
+    fileInput.value = '';
+    document.getElementById('csv-upload-filename').textContent = '';
 } 
 
 // Graph Visualization using Vis.js
@@ -1291,8 +1700,10 @@ window.addEventListener('DOMContentLoaded', function() {
 
 // Graph functions
 async function loadGraph() {
+    if (!currentProject) return;
+    
     try {
-        const response = await fetch('/api/requirements/graph');
+        const response = await fetch(`/api/requirements/graph?project_id=${currentProject.id}`);
         const data = await response.json();
         
         if (data.success) {
