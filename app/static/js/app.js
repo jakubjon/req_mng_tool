@@ -1240,6 +1240,11 @@ function handleRequirementSelection(event, requirementId) {
 
 function toggleSelectAll() {
     const selectAllCheckbox = document.getElementById('select-all-checkbox');
+    if (!selectAllCheckbox) {
+        console.warn('Select-all checkbox not found');
+        return;
+    }
+    
     const requirementCheckboxes = document.querySelectorAll('.requirement-checkbox');
     
     requirementCheckboxes.forEach(checkbox => {
@@ -1352,7 +1357,10 @@ async function saveBatchEdit() {
             
             // Clear selections
             selectedRequirements.clear();
-            document.getElementById('select-all-checkbox').checked = false;
+            const selectAllCheckbox = document.getElementById('select-all-checkbox');
+            if (selectAllCheckbox) {
+                selectAllCheckbox.checked = false;
+            }
             
             // Reload data
             loadRequirements(); // Changed from loadRequirements(currentGroupId)
