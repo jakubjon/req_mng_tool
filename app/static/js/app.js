@@ -9,6 +9,10 @@ let projectsData = []; // All projects accessible to current user
 // EasyMDE instance for requirement modal
 let reqDescriptionMDE = null;
 
+// Sorting variables
+let currentSortColumn = null;
+let currentSortDirection = 'asc'; // 'asc' or 'desc'
+
 function initReqDescriptionMDE() {
     // Wait for the modal to be fully shown
     setTimeout(() => {
@@ -70,6 +74,7 @@ document.addEventListener('DOMContentLoaded', function() {
     loadProjects();
     setupEventListeners();
     enableTableColumnResizing();
+    setupSorting();
 });
 
 // Project Management Functions
@@ -298,6 +303,92 @@ function enableTableColumnResizing() {
             resizing = false;
             document.body.style.cursor = '';
         }
+    });
+}
+
+// Sorting functions
+function setupSorting() {
+    const sortableHeaders = document.querySelectorAll('.sortable');
+    sortableHeaders.forEach(header => {
+        header.addEventListener('click', (e) => {
+            // Don't trigger sorting if clicking on resize handle
+            if (e.target.classList.contains('resize-handle')) return;
+            
+            const sortColumn = header.getAttribute('data-sort');
+            if (sortColumn) {
+                handleSort(sortColumn);
+            }
+        });
+    });
+}
+
+function handleSort(column) {
+    // If clicking the same column, toggle direction
+    if (currentSortColumn === column) {
+        currentSortDirection = currentSortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        // New column, start with ascending
+        currentSortColumn = column;
+        currentSortDirection = 'asc';
+    }
+    
+    // Update visual indicators
+    updateSortIndicators();
+    
+    // Sort the data
+    sortRequirements();
+    
+    // Re-render the table
+    renderRequirementsTable(requirementsData);
+}
+
+function updateSortIndicators() {
+    // Clear all sort indicators
+    document.querySelectorAll('.sortable').forEach(header => {
+        header.classList.remove('sort-asc', 'sort-desc');
+    });
+    
+    // Add indicator to current sort column
+    if (currentSortColumn) {
+        const currentHeader = document.querySelector(`[data-sort="${currentSortColumn}"]`);
+        if (currentHeader) {
+            currentHeader.classList.add(`sort-${currentSortDirection}`);
+        }
+    }
+}
+
+function sortRequirements() {
+    if (!currentSortColumn) return;
+    
+    requirementsData.sort((a, b) => {
+        let aVal = a[currentSortColumn];
+        let bVal = b[currentSortColumn];
+        
+        // Handle null/undefined values
+        if (aVal === null || aVal === undefined) aVal = '';
+        if (bVal === null || bVal === undefined) bVal = '';
+        
+        // Convert to strings for comparison
+        aVal = String(aVal).toLowerCase();
+        bVal = String(bVal).toLowerCase();
+        
+        // Special handling for dates
+        if (currentSortColumn === 'updated_at') {
+            aVal = new Date(a[currentSortColumn] || 0);
+            bVal = new Date(b[currentSortColumn] || 0);
+        }
+        
+        // Special handling for numbers
+        if (currentSortColumn === 'children_count') {
+            aVal = parseInt(a[currentSortColumn] || 0);
+            bVal = parseInt(b[currentSortColumn] || 0);
+        }
+        
+        let comparison = 0;
+        if (aVal < bVal) comparison = -1;
+        if (aVal > bVal) comparison = 1;
+        
+        return currentSortDirection === 'asc' ? comparison : -comparison;
     });
 }
 
@@ -696,6 +787,9 @@ function renderRequirementsTable(requirements) {
         tbody.appendChild(row);
     });
     updateBatchEditButton();
+    
+    // Update sort indicators after rendering
+    updateSortIndicators();
 }
 
 function filterRequirements() {

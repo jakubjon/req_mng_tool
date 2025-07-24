@@ -182,6 +182,38 @@
         .resize-handle:hover {
             background-color: rgba(102, 126, 234, 0.3);
         }
+        
+        /* Sortable column styles */
+        .sortable {
+            cursor: pointer;
+            transition: background-color 0.2s ease;
+        }
+        
+        .sortable:hover {
+            background-color: #f8f9fa;
+        }
+        
+        .sort-icon {
+            margin-left: 5px;
+            color: #6c757d;
+            font-size: 0.8em;
+        }
+        
+        .sortable.sort-asc .sort-icon {
+            color: #007bff;
+        }
+        
+        .sortable.sort-desc .sort-icon {
+            color: #007bff;
+        }
+        
+        .sortable.sort-asc .sort-icon::before {
+            content: "\f0de"; /* fa-sort-up */
+        }
+        
+        .sortable.sort-desc .sort-icon::before {
+            content: "\f0dd"; /* fa-sort-down */
+        }
         th { 
             position: relative; 
             min-width: 120px;
@@ -509,14 +541,38 @@
                                                     <th style="width: 20px; max-width: 20px;">
                                                         <input type="checkbox" class="form-check-input" id="select-all-checkbox" onchange="toggleSelectAll()">
                                                     </th>
-                                                    <th style="width: 80px;">ID <span class="resize-handle"></span></th>
-                                                    <th style="width: 200px;">Title <span class="resize-handle"></span></th>
-                                                    <th style="width: 300px;">Description <span class="resize-handle"></span></th>
-                                                    <th style="width: 120px;">Status <span class="resize-handle"></span></th>
-                                                    <th style="width: 120px;">Chapter <span class="resize-handle"></span></th>
-                                                    <th style="width: 150px;">Group <span class="resize-handle"></span></th>
-                                                    <th style="width: 100px;">Children <span class="resize-handle"></span></th>
-                                                    <th style="width: 120px;">Updated <span class="resize-handle"></span></th>
+                                                    <th style="width: 80px;" class="sortable" data-sort="requirement_id">
+                                                        ID <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 200px;" class="sortable" data-sort="title">
+                                                        Title <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 300px;" class="sortable" data-sort="description">
+                                                        Description <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 120px;" class="sortable" data-sort="status">
+                                                        Status <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 120px;" class="sortable" data-sort="chapter">
+                                                        Chapter <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 150px;" class="sortable" data-sort="group_name">
+                                                        Group <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 100px;" class="sortable" data-sort="children_count">
+                                                        Children <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
+                                                    <th style="width: 120px;" class="sortable" data-sort="updated_at">
+                                                        Updated <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
                                                     <th style="width: 120px;">Actions <span class="resize-handle"></span></th>
                                                 </tr>
                                             </thead>
