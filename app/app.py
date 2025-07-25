@@ -548,10 +548,22 @@ def get_requirements():
         chapter = request.args.get('chapter')
         group_id = request.args.get('group_id')
         parent_id = request.args.get('parent_id')
+        include_deleted = request.args.get('include_deleted', 'false').lower() == 'true'
         
         query = Requirement.query.filter_by(project_id=project_id)
         
-        if status:
+        # Handle deleted requirements logic
+        if status == 'deleted':
+            # If explicitly filtering for deleted, include them
+            query = query.filter(Requirement.status == 'deleted')
+        elif include_deleted:
+            # If show deleted checkbox is checked, include all requirements
+            pass  # Don't filter out deleted
+        else:
+            # By default, exclude deleted requirements
+            query = query.filter(Requirement.status != 'deleted')
+        
+        if status and status != 'deleted':
             query = query.filter(Requirement.status == status)
         if chapter:
             query = query.filter(Requirement.chapter == chapter)
@@ -718,7 +730,7 @@ def create_requirement():
 @app.route('/api/requirements/<requirement_id>', methods=['DELETE'])
 @login_required
 def delete_requirement(requirement_id):
-    """Delete a requirement"""
+    """Soft delete a requirement by setting status to 'deleted'"""
     try:
         requirement = Requirement.query.filter_by(requirement_id=requirement_id).first()
         if not requirement:
@@ -729,7 +741,22 @@ def delete_requirement(requirement_id):
         if not has_access:
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
-        db.session.delete(requirement)
+        # Soft delete: set status to 'deleted' instead of actually deleting
+        old_status = requirement.status
+        requirement.status = 'deleted'
+        requirement.updated_at = datetime.utcnow()
+        requirement.updated_by = get_current_user()
+        
+        # Add history entry for the status change
+        history = CellHistory(
+            requirement_id=requirement.id,
+            field_name='status',
+            old_value=old_status,
+            new_value='deleted',
+            changed_by=get_current_user()
+        )
+        db.session.add(history)
+        
         db.session.commit()
         
         return jsonify({'success': True, 'message': 'Requirement deleted successfully'})
@@ -1222,7 +1249,8 @@ def get_requirements_graph():
         if not has_access:
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
-        requirements = Requirement.query.filter_by(project_id=project_id).all()
+        # Exclude deleted requirements from graph view
+        requirements = Requirement.query.filter_by(project_id=project_id).filter(Requirement.status != 'deleted').all()
         nodes = []
         edges = []
         for req in requirements:

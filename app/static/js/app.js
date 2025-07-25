@@ -477,6 +477,7 @@ function setupEventListeners() {
     const statusFilter = document.getElementById('status-filter');
     const chapterFilter = document.getElementById('chapter-filter');
     const groupFilter = document.getElementById('group-filter');
+    const showDeletedCheckbox = document.getElementById('show-deleted-checkbox');
     
     if (searchInput) {
         searchInput.addEventListener('input', filterRequirements);
@@ -489,6 +490,12 @@ function setupEventListeners() {
     }
     if (groupFilter) {
         groupFilter.addEventListener('change', filterRequirements);
+    }
+    if (showDeletedCheckbox) {
+        showDeletedCheckbox.addEventListener('change', () => {
+            // Reload requirements from server when show deleted checkbox changes
+            loadRequirements();
+        });
     }
     
     // Modal cleanup for EasyMDE
@@ -745,6 +752,18 @@ async function loadRequirements(groupId = null) {
             url += `&group_id=${groupId}`;
         }
         
+        // Check if show deleted checkbox is checked
+        const showDeletedCheckbox = document.getElementById('show-deleted-checkbox');
+        if (showDeletedCheckbox && showDeletedCheckbox.checked) {
+            url += `&include_deleted=true`;
+        }
+        
+        // Check if status filter is set to 'deleted'
+        const statusFilter = document.getElementById('status-filter');
+        if (statusFilter && statusFilter.value === 'deleted') {
+            url += `&status=deleted`;
+        }
+        
         const response = await fetch(url);
         const data = await response.json();
         
@@ -797,8 +816,20 @@ function filterRequirements() {
     const statusFilter = document.getElementById('status-filter').value;
     const chapterFilter = document.getElementById('chapter-filter').value;
     const groupFilter = document.getElementById('group-filter').value;
+    const showDeleted = document.getElementById('show-deleted-checkbox').checked;
+    
+    // If status filter is set to 'deleted', we need to reload data from server
+    if (statusFilter === 'deleted') {
+        loadRequirements();
+        return;
+    }
     
     const filtered = requirementsData.filter(req => {
+        // If show deleted is not checked, exclude deleted requirements
+        if (!showDeleted && req.status === 'deleted') {
+            return false;
+        }
+        
         // Text search
         const matchesSearch = !searchTerm || 
             req.title.toLowerCase().includes(searchTerm) ||
@@ -826,6 +857,7 @@ function clearFilters() {
     document.getElementById('status-filter').value = '';
     document.getElementById('chapter-filter').value = '';
     document.getElementById('group-filter').value = '';
+    document.getElementById('show-deleted-checkbox').checked = false;
     filterRequirements();
 }
 

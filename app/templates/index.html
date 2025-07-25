@@ -497,7 +497,7 @@
                         <!-- <div class="col-md-9"> -->
                             <!-- Filters -->
                             <div class="row mb-3 g-2 align-items-end">
-                                <div class="col-md-4">
+                                <div class="col-md-3">
                                     <input type="text" class="form-control" id="search-input" placeholder="Search requirements...">
                                 </div>
                                 <div class="col-md-2">
@@ -507,6 +507,7 @@
                                         <option value="In Progress">In Progress</option>
                                         <option value="Review">Review</option>
                                         <option value="Completed">Completed</option>
+                                        <option value="deleted">Deleted</option>
                                     </select>
                                 </div>
                                 <div class="col-md-2">
@@ -520,7 +521,13 @@
                                     </select>
                                 </div>
                                 <div class="col-md-2">
-                                    <button class="btn btn-outline-secondary w-100" onclick="clearFilters()">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="show-deleted-checkbox">
+                                        <label class="form-check-label" for="show-deleted-checkbox">
+                                            Show Deleted
+                                        </label>
+                                    </div>
+                                    <button class="btn btn-outline-secondary w-100 mt-1" onclick="clearFilters()">
                                         <i class="fas fa-times me-1"></i>Clear
                                     </button>
                                 </div>
