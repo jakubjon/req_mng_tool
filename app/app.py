@@ -4,22 +4,17 @@ import os
 import pandas as pd
 from datetime import datetime
 import uuid
-from dotenv import load_dotenv
-from . import create_app
-from app import db
+from app import create_app, db
 from app.models import Requirement, CellHistory, Group, User, Project
 
 
 # Load environment variables
 app = create_app()
 
-# Load environment variables for this module as well
-load_dotenv()
-
 def get_current_user():
     """Get current user from session"""
     if 'user_id' in session:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         return user.username if user else None
     return None
 
@@ -35,12 +30,12 @@ def login_required(f):
 # Utility function to check if any users exist
 
 def users_exist():
-    return User.query.first() is not None
+    return db.session.query(User).first() is not None
 
 def check_project_access(user_id, project_id):
     """Helper function to check if user has access to a project"""
-    user = User.query.get(user_id)
-    project = Project.query.get(project_id)
+    user = db.session.get(User, user_id)
+    project = db.session.get(Project, project_id)
     
     if not user or not project:
         return False, None, None
@@ -57,7 +52,7 @@ def index():
     if 'user_id' not in session:
         return redirect(url_for('login_page'))
     # Defensive: check if user_id is valid
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     if not user:
         session.pop('user_id', None)
         return redirect(url_for('login_page'))
@@ -70,7 +65,7 @@ def login_page():
     if not users_exist():
         return render_template('login.html')
     if 'user_id' in session:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if user:
             return redirect(url_for('index'))
         else:
@@ -155,7 +150,7 @@ def get_current_user_info():
         return jsonify({'success': False, 'error': 'No users exist'}), 401
     if 'user_id' not in session:
         return jsonify({'success': False, 'error': 'Not logged in'}), 401
-    user = User.query.get(session['user_id'])
+    user = db.session.get(User, session['user_id'])
     if not user:
         session.pop('user_id', None)
         return jsonify({'success': False, 'error': 'User not found'}), 401
@@ -170,7 +165,7 @@ def get_current_user_info():
 def get_projects():
     """Get all projects accessible to current user"""
     try:
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         if not user:
             return jsonify({'success': False, 'error': 'User not found'}), 401
         
@@ -191,7 +186,7 @@ def create_project():
     try:
         data = request.json
         current_user = get_current_user()
-        user = User.query.get(session['user_id'])
+        user = db.session.get(User, session['user_id'])
         
         if not data.get('name'):
             return jsonify({'success': False, 'error': 'Project name is required'}), 400
@@ -227,8 +222,8 @@ def create_project():
 def update_project(project_id):
     """Update a project"""
     try:
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(project_id)
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, project_id)
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -266,8 +261,8 @@ def update_project(project_id):
 def delete_project(project_id):
     """Delete a project"""
     try:
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(project_id)
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, project_id)
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -293,8 +288,8 @@ def delete_project(project_id):
 def add_user_to_project(project_id):
     """Add user access to project"""
     try:
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(project_id)
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, project_id)
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -332,8 +327,8 @@ def add_user_to_project(project_id):
 def remove_user_from_project(project_id, user_id):
     """Remove user access from project"""
     try:
-        current_user = User.query.get(session['user_id'])
-        project = Project.query.get(project_id)
+        current_user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, project_id)
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -342,7 +337,7 @@ def remove_user_from_project(project_id, user_id):
         if current_user not in project.users:
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
-        target_user = User.query.get(user_id)
+        target_user = db.session.get(User, user_id)
         if not target_user:
             return jsonify({'success': False, 'error': 'User not found'}), 404
         
@@ -374,8 +369,8 @@ def get_groups():
         if not project_id:
             return jsonify({'success': False, 'error': 'Project ID is required'}), 400
         
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(project_id)
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, project_id)
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -415,8 +410,8 @@ def create_group():
         if not data.get('project_id'):
             return jsonify({'success': False, 'error': 'Project ID is required'}), 400
         
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(data['project_id'])
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, data['project_id'])
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -427,7 +422,7 @@ def create_group():
         
         # Check if parent group exists and belongs to the same project
         if data.get('parent_id'):
-            parent_group = Group.query.get(data['parent_id'])
+            parent_group = db.session.get(Group, data['parent_id'])
             if not parent_group or parent_group.project_id != data['project_id']:
                 return jsonify({'success': False, 'error': 'Parent group not found or does not belong to this project'}), 400
         
@@ -455,14 +450,14 @@ def create_group():
 def update_group(group_id):
     """Update a group"""
     try:
-        user = User.query.get(session['user_id'])
-        group = Group.query.get(group_id)
+        user = db.session.get(User, session['user_id'])
+        group = db.session.get(Group, group_id)
         
         if not group:
             return jsonify({'success': False, 'error': 'Group not found'}), 404
         
         # Check if user has access to the project this group belongs to
-        project = Project.query.get(group.project_id)
+        project = db.session.get(Project, group.project_id)
         if user not in project.users:
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
@@ -475,7 +470,7 @@ def update_group(group_id):
         if 'parent_id' in data:
             # Check if new parent exists and belongs to the same project
             if data['parent_id']:
-                parent_group = Group.query.get(data['parent_id'])
+                parent_group = db.session.get(Group, data['parent_id'])
                 if not parent_group or parent_group.project_id != group.project_id:
                     return jsonify({'success': False, 'error': 'Parent group not found or does not belong to this project'}), 400
             group.parent_id = data['parent_id']
@@ -497,14 +492,14 @@ def update_group(group_id):
 def delete_group(group_id):
     """Delete a group"""
     try:
-        user = User.query.get(session['user_id'])
-        group = Group.query.get(group_id)
+        user = db.session.get(User, session['user_id'])
+        group = db.session.get(Group, group_id)
         
         if not group:
             return jsonify({'success': False, 'error': 'Group not found'}), 404
         
         # Check if user has access to the project this group belongs to
-        project = Project.query.get(group.project_id)
+        project = db.session.get(Project, group.project_id)
         if user not in project.users:
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
@@ -533,8 +528,8 @@ def get_requirements():
         if not project_id:
             return jsonify({'success': False, 'error': 'Project ID is required'}), 400
         
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(project_id)
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, project_id)
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -569,7 +564,7 @@ def get_requirements():
             query = query.filter(Requirement.chapter == chapter)
         if group_id:
             # Verify group belongs to this project
-            group = Group.query.get(group_id)
+            group = db.session.get(Group, group_id)
             if not group or group.project_id != project_id:
                 return jsonify({'success': False, 'error': 'Group not found or does not belong to this project'}), 400
             query = query.filter(Requirement.group_id == group_id)
@@ -630,14 +625,22 @@ def update_requirement(requirement_id):
         if 'group_id' in data and not data['group_id']:
             return jsonify({'success': False, 'error': 'Group is required'}), 400
         
-        # If group_id is being changed, verify the new group belongs to the same project
+        # Handle group_id - create group if it doesn't exist
         if 'group_id' in data and data['group_id'] and requirement.group_id != data['group_id']:
-            new_group = Group.query.get(data['group_id'])
-            if not new_group or new_group.project_id != requirement.project_id:
-                return jsonify({'success': False, 'error': 'Group not found or does not belong to this project'}), 400
+            new_group = db.session.get(Group, data['group_id'])
+            if not new_group:
+                # Create the group automatically
+                new_group = Group(
+                    id=data['group_id'],
+                    name=f"Group {data['group_id'][:8]}",  # Use first 8 chars of ID as name
+                    project_id=requirement.project_id,
+                    created_by=current_user
+                )
+                db.session.add(new_group)
+                db.session.flush()  # Flush to get the ID
         
         # Track changes for each field
-        fields_to_track = ['title', 'description', 'status', 'chapter']
+        fields_to_track = ['title', 'description', 'status', 'chapter', 'verification_method']
         for field in fields_to_track:
             if field in data and getattr(requirement, field) != data[field]:
                 # Record the change
@@ -688,8 +691,8 @@ def create_requirement():
         if not group_id:
             return jsonify({'success': False, 'error': 'Group is required'}), 400
         
-        user = User.query.get(session['user_id'])
-        project = Project.query.get(data['project_id'])
+        user = db.session.get(User, session['user_id'])
+        project = db.session.get(Project, data['project_id'])
         
         if not project:
             return jsonify({'success': False, 'error': 'Project not found'}), 404
@@ -698,10 +701,20 @@ def create_requirement():
         if user not in project.users:
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
-        # Verify group belongs to this project
-        group = Group.query.get(group_id)
-        if not group or group.project_id != data['project_id']:
-            return jsonify({'success': False, 'error': 'Group not found or does not belong to this project'}), 400
+        # Get or create group
+        group = db.session.get(Group, group_id)
+        if not group:
+            # Create the group automatically
+            group = Group(
+                id=group_id,
+                name=f"Group {group_id[:8]}",  # Use first 8 chars of ID as name
+                project_id=data['project_id'],
+                created_by=current_user
+            )
+            db.session.add(group)
+            db.session.flush()  # Flush to get the ID
+        elif group.project_id != data['project_id']:
+            return jsonify({'success': False, 'error': 'Group does not belong to this project'}), 400
         
         requirement = Requirement(
             requirement_id=data['requirement_id'],
@@ -792,7 +805,7 @@ def upload_excel():
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
         # Verify group belongs to this project
-        group = Group.query.get(group_id)
+        group = db.session.get(Group, group_id)
         if not group or group.project_id != project_id:
             return jsonify({'success': False, 'error': 'Group not found or does not belong to this project'}), 400
         
@@ -908,7 +921,7 @@ def upload_csv():
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
         # Verify group belongs to this project
-        group = Group.query.get(group_id)
+        group = db.session.get(Group, group_id)
         if not group or group.project_id != project_id:
             return jsonify({'success': False, 'error': 'Group not found or does not belong to this project'}), 400
         
@@ -1114,7 +1127,7 @@ def move_requirement(requirement_id):
             return jsonify({'success': False, 'error': 'New group ID is required'}), 400
         
         # Check if new group exists and belongs to the same project
-        new_group = Group.query.get(new_group_id)
+        new_group = db.session.get(Group, new_group_id)
         if not new_group:
             return jsonify({'success': False, 'error': 'New group not found'}), 404
         
@@ -1171,20 +1184,31 @@ def batch_update_requirements():
             return jsonify({'success': False, 'error': 'Access denied'}), 403
         
         # Validate updates
-        allowed_fields = {'status', 'chapter', 'group_id'}
+        allowed_fields = {'status', 'chapter', 'verification_method', 'group_id'}
         invalid_fields = set(updates.keys()) - allowed_fields
         if invalid_fields:
             return jsonify({'success': False, 'error': f'Invalid fields: {", ".join(invalid_fields)}'}), 400
         
-        # Check if group_id is valid if provided
-        if 'group_id' in updates and updates['group_id']:
-            group = Group.query.get(updates['group_id'])
-            if not group or group.project_id != project_id:
-                return jsonify({'success': False, 'error': 'Invalid group ID or group does not belong to this project'}), 400
-        
         # Update requirements
         updated_count = 0
         current_user = get_current_user()
+        
+        # Get or create group if group_id is provided
+        group = None
+        if 'group_id' in updates and updates['group_id']:
+            group = db.session.get(Group, updates['group_id'])
+            if not group:
+                # Create the group automatically
+                group = Group(
+                    id=updates['group_id'],
+                    name=f"Group {updates['group_id'][:8]}",  # Use first 8 chars of ID as name
+                    project_id=project_id,
+                    created_by=current_user
+                )
+                db.session.add(group)
+                db.session.flush()  # Flush to get the ID
+            elif group.project_id != project_id:
+                return jsonify({'success': False, 'error': 'Group does not belong to this project'}), 400
         
         for req_id in requirement_ids:
             requirement = Requirement.query.filter_by(requirement_id=req_id, project_id=project_id).first()
@@ -1202,6 +1226,11 @@ def batch_update_requirements():
                     if requirement.chapter != updates['chapter']:
                         changes.append(('chapter', requirement.chapter, updates['chapter']))
                         requirement.chapter = updates['chapter']
+                
+                if 'verification_method' in updates and updates['verification_method']:
+                    if requirement.verification_method != updates['verification_method']:
+                        changes.append(('verification_method', requirement.verification_method, updates['verification_method']))
+                        requirement.verification_method = updates['verification_method']
                 
                 if 'group_id' in updates and updates['group_id']:
                     if requirement.group_id != updates['group_id']:
@@ -1398,6 +1427,11 @@ def update_requirement_position(requirement_id):
         return jsonify({'success': False, 'error': str(e)}), 500
 
 if __name__ == '__main__':
+    import os
+    host = os.environ.get('FLASK_HOST', '0.0.0.0')
+    port = int(os.environ.get('FLASK_PORT', 5000))
+    debug = os.environ.get('FLASK_DEBUG', '1').lower() == '1'
+    
     with app.app_context():
         db.create_all()
-    app.run(debug=True, host='0.0.0.0', port=5000) 
+    app.run(debug=debug, host=host, port=port) 

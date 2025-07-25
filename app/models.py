@@ -142,6 +142,7 @@ class Requirement(db.Model):
     created_by = db.Column(db.String(100))
     updated_by = db.Column(db.String(100))
     chapter = db.Column(db.String(100))
+    verification_method = db.Column(db.String(10), nullable=True)  # A, RoD, I, T
     graph_x = db.Column(db.Float, nullable=True)  # X position in graph
     graph_y = db.Column(db.Float, nullable=True)  # Y position in graph
     
@@ -166,6 +167,7 @@ class Requirement(db.Model):
             'description': self.description,
             'status': self.status,
             'chapter': self.chapter,
+            'verification_method': self.verification_method,
             'group_id': self.group_id,
             'group_name': self.group_obj.name if self.group_obj else None,
             'project_id': self.project_id,

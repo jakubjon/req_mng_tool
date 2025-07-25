@@ -498,12 +498,44 @@ function setupEventListeners() {
         });
     }
     
+    // Setup focus management for all modals
+    setupModalFocusManagement('requirementModal');
+    setupModalFocusManagement('moveRequirementModal');
+    setupModalFocusManagement('requirementDetailsModal');
+    setupModalFocusManagement('projectModal');
+    setupModalFocusManagement('projectManagementModal');
+    setupModalFocusManagement('csvUploadModal');
+    setupModalFocusManagement('excelUploadModal');
+    setupModalFocusManagement('batchEditModal');
+    setupModalFocusManagement('groupModal');
+    
     // Modal cleanup for EasyMDE
     const requirementModal = document.getElementById('requirementModal');
     if (requirementModal) {
         requirementModal.addEventListener('hidden.bs.modal', function() {
             // Destroy EasyMDE when modal is hidden
             destroyReqDescriptionMDE();
+        });
+    }
+    
+    // Special handling for requirementDetailsModal to prevent focus issues
+    const requirementDetailsModal = document.getElementById('requirementDetailsModal');
+    if (requirementDetailsModal) {
+        requirementDetailsModal.addEventListener('hidden.bs.modal', function() {
+            // Explicitly blur any focused elements and restore focus
+            const focusedElement = requirementDetailsModal.querySelector(':focus');
+            if (focusedElement) {
+                focusedElement.blur();
+            }
+            
+            // Force focus restoration
+            setTimeout(() => {
+                const activeElement = document.querySelector('[data-bs-target="#requirementDetailsModal"]') || 
+                                    document.querySelector('[onclick*="showRequirementDetails"]');
+                if (activeElement && activeElement.focus) {
+                    activeElement.focus();
+                }
+            }, 100);
         });
     }
 }
@@ -795,6 +827,7 @@ function renderRequirementsTable(requirements) {
             <td>${req.description ? marked.parse(req.description) : ''}</td>
             <td><span class="badge bg-secondary">${req.status}</span></td>
             <td>${req.chapter || '-'}</td>
+            <td>${req.verification_method || '-'}</td>
             <td>${req.group_name || '-'}</td>
             <td>${req.children_count}</td>
             <td>${formatDate(req.updated_at)}</td>
@@ -887,10 +920,85 @@ function populateGroupFilter() {
 }
 
 
+// Focus management utility
+function setupModalFocusManagement(modalId) {
+    const modal = document.getElementById(modalId);
+    if (!modal) return;
+    
+    let previousActiveElement = null;
+    
+    modal.addEventListener('show.bs.modal', function() {
+        previousActiveElement = document.activeElement;
+        
+        // Focus trap: ensure focus stays within the modal when it's open
+        const focusableElements = modal.querySelectorAll(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+        );
+        
+        if (focusableElements.length > 0) {
+            // Focus on the first focusable element
+            focusableElements[0].focus();
+        }
+    });
+    
+    modal.addEventListener('hidden.bs.modal', function() {
+        // Blur any focused elements within the modal
+        const focusedElement = modal.querySelector(':focus');
+        if (focusedElement) {
+            focusedElement.blur();
+        }
+        
+        // Ensure focus is properly restored
+        setTimeout(() => {
+            if (previousActiveElement && previousActiveElement.focus) {
+                previousActiveElement.focus();
+            }
+        }, 50);
+    });
+    
+    // Handle close buttons specifically
+    const closeButtons = modal.querySelectorAll('[data-bs-dismiss="modal"]');
+    closeButtons.forEach(button => {
+        button.addEventListener('click', function(e) {
+            // Prevent the close button from retaining focus
+            e.preventDefault();
+            e.stopPropagation();
+            
+            // Store the current focus before closing
+            const currentFocus = document.activeElement;
+            
+            // Close the modal
+            const modalInstance = bootstrap.Modal.getInstance(modal);
+            if (modalInstance) {
+                modalInstance.hide();
+            }
+            
+            // Restore focus after a short delay
+            setTimeout(() => {
+                if (previousActiveElement && previousActiveElement.focus) {
+                    previousActiveElement.focus();
+                }
+            }, 100);
+        });
+    });
+    
+    // Handle ESC key and backdrop clicks
+    modal.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            setTimeout(() => {
+                if (previousActiveElement && previousActiveElement.focus) {
+                    previousActiveElement.focus();
+                }
+            }, 100);
+        }
+    });
+}
+
 // Modal functions
 function showAddRequirementModal() {
     document.getElementById('modal-title').textContent = 'Add Requirement';
     document.getElementById('requirement-form').reset();
+    document.getElementById('verification-method-field').value = '';
     currentRequirementId = null;
     // Load parent options
     loadGroupOptions();
@@ -901,6 +1009,14 @@ function showAddRequirementModal() {
     
     // Initialize EasyMDE after modal is shown
     initReqDescriptionMDE();
+    
+    // Focus on the first input field for better accessibility
+    setTimeout(() => {
+        const firstInput = document.getElementById('req-id');
+        if (firstInput) {
+            firstInput.focus();
+        }
+    }, 150);
 }
 
 function editRequirement(requirementId) {
@@ -912,6 +1028,9 @@ function editRequirement(requirementId) {
     document.getElementById('req-id').value = requirement.requirement_id;
     document.getElementById('req-title').value = requirement.title;
     document.getElementById('req-status').value = requirement.status;
+    document.getElementById('verification-method-field').value = requirement.verification_method || '';
+    
+    // Load group options
     loadGroupOptions();
     if (requirement.group_id) {
         document.getElementById('req-group-id').value = requirement.group_id;
@@ -923,6 +1042,14 @@ function editRequirement(requirementId) {
     // Initialize EasyMDE after modal is shown and set the value
     initReqDescriptionMDE();
     setReqDescriptionValue(requirement.description || '');
+    
+    // Focus on the first input field for better accessibility
+    setTimeout(() => {
+        const firstInput = document.getElementById('req-id');
+        if (firstInput) {
+            firstInput.focus();
+        }
+    }, 150);
 }
 
 async function saveRequirement() {
@@ -937,6 +1064,7 @@ async function saveRequirement() {
         description: getReqDescriptionValue(),
         status: document.getElementById('req-status').value,
         chapter: document.getElementById('chapter-field').value || null,
+        verification_method: document.getElementById('verification-method-field').value || null,
         project_id: currentProject.id
     };
     const groupId = document.getElementById('req-group-id').value;
@@ -961,7 +1089,8 @@ async function saveRequirement() {
         console.log('saveRequirement response:', data);
         if (data.success) {
             showAlert('Requirement saved successfully', 'success');
-            bootstrap.Modal.getInstance(document.getElementById('requirementModal')).hide();
+            const modal = bootstrap.Modal.getInstance(document.getElementById('requirementModal'));
+            modal.hide();
             loadRequirements();
         } else {
             showAlert(data.error || 'Error saving requirement', 'danger');
@@ -998,6 +1127,10 @@ async function showRequirementDetails(requirementId) {
                             <div class="detail-item">
                                 <div class="detail-label">Group:</div>
                                 <div class="detail-value">${req.group_name || 'Default'}</div>
+                            </div>
+                            <div class="detail-item">
+                                <div class="detail-label">Verification Method:</div>
+                                <div class="detail-value">${req.verification_method || '-'}</div>
                             </div>
                         </div>
                     </div>
@@ -1448,12 +1581,14 @@ async function saveBatchEdit() {
     
     const status = document.getElementById('batch-status').value;
     const chapter = document.getElementById('batch-chapter').value;
+    const verificationMethod = document.getElementById('batch-verification-method').value;
     const groupId = document.getElementById('batch-group-id').value;
     
     // Prepare update data
     const updateData = {};
     if (status) updateData.status = status;
     if (chapter !== '') updateData.chapter = chapter || null; // Allow empty string to clear chapter
+    if (verificationMethod) updateData.verification_method = verificationMethod;
     if (groupId) updateData.group_id = groupId;
     
     if (Object.keys(updateData).length === 0) {

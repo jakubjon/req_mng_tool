@@ -9,11 +9,14 @@ else
     exit 1
 fi
 
-# Set environment variables
-export DATABASE_URL="postgresql://reqmng:reqmng@localhost:5432/reqmng"
-export FLASK_ENV=development
-export FLASK_DEBUG=1
-export SECRET_KEY="dev-secret-key-change-in-production"
+# Load environment variables from .env file
+if [ -f .env ]; then
+    echo "Loading environment variables from .env file..."
+    export $(grep -v '^#' .env | xargs)
+else
+    echo ".env file not found. Please copy env.example to .env and configure it."
+    exit 1
+fi
 
 echo "Environment variables set for local development."
 echo "DATABASE_URL: $DATABASE_URL"
@@ -28,6 +31,13 @@ fi
 
 echo "Waiting for Postgres to initialize..."
 sleep 8
+
+echo "Applying database migrations..."
+python db_utils/manage_migrations.py upgrade
+if [ $? -ne 0 ]; then
+    echo "Failed to apply database migrations."
+    exit 1
+fi
 
 echo "Starting Flask app..."
 python -m app.app 

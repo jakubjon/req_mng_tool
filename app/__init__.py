@@ -18,9 +18,6 @@ def create_app(config_name: str = "development") -> Flask:
     CORS(app)
 
     app.config.from_object(config[config_name])
-    app.config.setdefault("UPLOAD_FOLDER", "uploads")
-    app.config.setdefault("MAX_CONTENT_LENGTH", 16 * 1024 * 1024)
-    app.config.setdefault("SECRET_KEY", os.getenv("SECRET_KEY", "dev-secret-key-change-in-production"))
     app.config.setdefault("SESSION_TYPE", "filesystem")
 
     Session(app)
@@ -28,7 +25,7 @@ def create_app(config_name: str = "development") -> Flask:
 
 
     db.init_app(app)
-    with app.app_context():
-        db.create_all()
+    # Note: Database tables are now managed by Alembic migrations
+    # Run 'python db_utils/manage_migrations.py upgrade' to apply migrations
     return app
 

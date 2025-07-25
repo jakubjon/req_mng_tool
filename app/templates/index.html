@@ -8,6 +8,7 @@
     <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
     <link href="https://cdn.jsdelivr.net/npm/select2@4.1.0-rc.0/dist/css/select2.min.css" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.css">
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/easymde/dist/easymde.min.js"></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js"></script>
@@ -568,6 +569,10 @@
                                                         Chapter <i class="fas fa-sort sort-icon"></i>
                                                         <span class="resize-handle"></span>
                                                     </th>
+                                                    <th style="width: 120px;" class="sortable" data-sort="verification_method">
+                                                        Verification <i class="fas fa-sort sort-icon"></i>
+                                                        <span class="resize-handle"></span>
+                                                    </th>
                                                     <th style="width: 150px;" class="sortable" data-sort="group_name">
                                                         Group <i class="fas fa-sort sort-icon"></i>
                                                         <span class="resize-handle"></span>
@@ -644,12 +649,12 @@
     </div>
 
     <!-- Add/Edit Group Modal -->
-    <div class="modal fade" id="groupModal" tabindex="-1">
+    <div class="modal fade" id="groupModal" tabindex="-1" aria-labelledby="group-modal-title" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="group-modal-title">Add Group</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="group-form">
@@ -678,12 +683,12 @@
     </div>
 
     <!-- Add/Edit Requirement Modal -->
-    <div class="modal fade" id="requirementModal" tabindex="-1">
+    <div class="modal fade" id="requirementModal" tabindex="-1" aria-labelledby="modal-title" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="modal-title">Add Requirement</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="requirement-form">
@@ -723,6 +728,18 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
+                                    <label class="form-label">Verification Method</label>
+                                    <select class="form-select" id="verification-method-field">
+                                        <option value="">Select method</option>
+                                        <option value="A">A - Analysis</option>
+                                        <option value="RoD">RoD - Review of Design</option>
+                                        <option value="I">I - Inspection</option>
+                                        <option value="T">T - Test</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
                                     <label class="form-label">Group</label>
                                     <select class="form-select" id="req-group-id" required>
                                         <option value="">Select a group</option>
@@ -741,12 +758,12 @@
     </div>
 
     <!-- Move Requirement Modal -->
-    <div class="modal fade" id="moveRequirementModal" tabindex="-1">
+    <div class="modal fade" id="moveRequirementModal" tabindex="-1" aria-labelledby="move-requirement-title" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Move Requirement</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="move-requirement-title">Move Requirement</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="move-requirement-form">
@@ -779,12 +796,12 @@
     </div>
 
     <!-- Requirement Details Modal -->
-    <div class="modal fade" id="requirementDetailsModal" tabindex="-1">
+    <div class="modal fade" id="requirementDetailsModal" tabindex="-1" aria-labelledby="requirement-details-title" aria-hidden="true">
         <div class="modal-dialog modal-xl">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Requirement Details</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="requirement-details-title">Requirement Details</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <ul class="nav nav-tabs" id="requirement-tabs">
@@ -822,12 +839,12 @@
     </div>
 
     <!-- Batch Edit Modal -->
-    <div class="modal fade" id="batchEditModal" tabindex="-1">
+    <div class="modal fade" id="batchEditModal" tabindex="-1" aria-labelledby="batch-edit-title" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Batch Edit Requirements</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="batch-edit-title">Batch Edit Requirements</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="alert alert-info">
@@ -857,6 +874,18 @@
                             </div>
                             <div class="col-md-4">
                                 <div class="mb-3">
+                                    <label class="form-label">Verification Method</label>
+                                    <select class="form-select" id="batch-verification-method">
+                                        <option value="">Keep Current</option>
+                                        <option value="A">A - Analysis</option>
+                                        <option value="RoD">RoD - Review of Design</option>
+                                        <option value="I">I - Inspection</option>
+                                        <option value="T">T - Test</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="mb-3">
                                     <label class="form-label">Group</label>
                                     <select class="form-select" id="batch-group-id">
                                         <option value="">Keep Current</option>
@@ -881,12 +910,12 @@
     </div>
 
     <!-- Add/Edit Project Modal -->
-    <div class="modal fade" id="projectModal" tabindex="-1">
+    <div class="modal fade" id="projectModal" tabindex="-1" aria-labelledby="project-modal-title" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
                     <h5 class="modal-title" id="project-modal-title">Create New Project</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <form id="project-form">
@@ -909,12 +938,12 @@
     </div>
 
     <!-- Project Management Modal -->
-    <div class="modal fade" id="projectManagementModal" tabindex="-1">
+    <div class="modal fade" id="projectManagementModal" tabindex="-1" aria-labelledby="project-management-title" aria-hidden="true">
         <div class="modal-dialog modal-lg">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Project Management</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="project-management-title">Project Management</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <ul class="nav nav-tabs" id="project-tabs">
@@ -958,12 +987,12 @@
     </div>
 
     <!-- Excel Upload Modal -->
-    <div class="modal fade" id="excelUploadModal" tabindex="-1">
+    <div class="modal fade" id="excelUploadModal" tabindex="-1" aria-labelledby="excel-upload-title" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Upload Requirements from Excel</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="excel-upload-title">Upload Requirements from Excel</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
@@ -1007,12 +1036,12 @@
     </div>
 
     <!-- CSV Upload Modal -->
-    <div class="modal fade" id="csvUploadModal" tabindex="-1">
+    <div class="modal fade" id="csvUploadModal" tabindex="-1" aria-labelledby="csv-upload-title" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
                 <div class="modal-header">
-                    <h5 class="modal-title">Upload Requirements from CSV</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                    <h5 class="modal-title" id="csv-upload-title">Upload Requirements from CSV</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                 </div>
                 <div class="modal-body">
                     <div class="mb-3">
