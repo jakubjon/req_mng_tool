@@ -318,7 +318,7 @@ The `.env` file contains all necessary variables:
 ```env
 # Database Configuration
 DATABASE_URL=postgresql://reqmng:reqmng@localhost:5432/reqmng
-DATABASE_URL_DOCKER=postgresql://reqmng:reqmng@postgres:5432/reqmng
+
 
 # Flask Configuration
 FLASK_ENV=development
@@ -377,7 +377,36 @@ docker-compose up --build --force-recreate
 
 This project uses **Alembic** for database schema management. All database changes should be made through migrations.
 
-### Migration Commands
+### How It Works
+
+The migration system automatically:
+1. **Reads** the current database version from `alembic_version` table
+2. **Scans** available migrations in `migrations/versions/`
+3. **Compares** database version vs. repository version
+4. **Applies** any missing migrations in order
+5. **Updates** the database version to latest
+
+### Database Switching
+
+**To work with any database, simply change `DATABASE_URL` in `.env`:**
+```bash
+# Local development
+DATABASE_URL=postgresql://reqmng:reqmng@localhost:5432/reqmng
+
+# Production (Railway)
+DATABASE_URL=postgresql://postgres:password@host:port/database
+
+# Staging/Testing
+DATABASE_URL=postgresql://user:pass@staging-host:5432/staging_db
+```
+
+**Then run the same migration commands:**
+```bash
+python db_utils/manage_migrations.py status    # Check status
+python db_utils/manage_migrations.py upgrade   # Apply migrations
+```
+
+### Local Migration Commands
 
 ```bash
 # Check migration status
@@ -394,6 +423,60 @@ python db_utils/manage_migrations.py downgrade
 
 # Show migration history
 python db_utils/manage_migrations.py history
+
+# Mark database as up-to-date (fix version mismatches)
+python db_utils/manage_migrations.py stamp <version>
+
+# Mark database as latest version (when schema is correct but version is wrong)
+python db_utils/manage_migrations.py stamp head
+
+### Migration Troubleshooting
+
+**When migrations fail, the system will show diagnostic information and require manual intervention:**
+
+1. **Check Migration Status**:
+   ```bash
+   python db_utils/manage_migrations.py status
+   ```
+
+2. **If Schema is Correct but Version is Wrong**:
+   ```bash
+   python db_utils/manage_migrations.py stamp head
+   ```
+
+3. **If Schema is Inconsistent**:
+   - **Option A**: Reset database and reapply migrations
+   - **Option B**: Manually fix schema inconsistencies
+   - **Option C**: Create a new migration to fix the issue
+
+4. **Common Issues**:
+   - **DuplicateColumn**: Column already exists → Use `stamp head`
+   - **MissingColumn**: Column doesn't exist → Apply migrations or fix schema
+   - **VersionMismatch**: Database version tracking is wrong → Use `stamp <version>`
+
+**⚠️ Important**: Never automatically stamp databases in production. Always investigate migration failures.
+```
+
+### Database Management
+
+**Switch Between Databases:**
+Simply change the `DATABASE_URL` in your `.env` file:
+
+```bash
+# Local development
+DATABASE_URL=postgresql://reqmng:reqmng@localhost:5432/reqmng
+
+# Production (Railway)
+DATABASE_URL=postgresql://postgres:password@host:port/database
+
+# Any other database
+DATABASE_URL=postgresql://user:pass@host:port/dbname
+```
+
+**Apply Migrations to Any Database:**
+```bash
+# The same command works for any database
+python db_utils/manage_migrations.py upgrade
 ```
 
 ### Migration Workflow
@@ -401,8 +484,11 @@ python db_utils/manage_migrations.py history
 1. **Make model changes** in `app/models.py`
 2. **Create migration**: `python db_utils/manage_migrations.py create "Description"`
 3. **Review migration** in `migrations/versions/`
-4. **Apply migration**: `python db_utils/manage_migrations.py upgrade`
+4. **Apply to any database**: `python db_utils/manage_migrations.py upgrade`
 5. **Test changes** in your application
+6. **Deploy to production**:
+   - **Option A**: Commit and push to trigger Railway deployment (automatic)
+   - **Option B**: Change `DATABASE_URL` to production and run: `python db_utils/manage_migrations.py upgrade`
 
 ### Important Notes
 
@@ -410,4 +496,6 @@ python db_utils/manage_migrations.py history
 - **Always test migrations** on a copy of production data
 - **Backup your database** before applying migrations
 - **Review auto-generated migrations** before applying them
+- **Switch databases safely** by changing `DATABASE_URL` in `.env`
+- **One migration system** works for all databases (local, production, staging, etc.)
 

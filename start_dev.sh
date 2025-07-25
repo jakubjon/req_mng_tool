@@ -35,7 +35,21 @@ sleep 8
 echo "Applying database migrations..."
 python db_utils/manage_migrations.py upgrade
 if [ $? -ne 0 ]; then
-    echo "Failed to apply database migrations."
+    echo ""
+    echo "❌ Migration failed! This could indicate:"
+    echo "  - Database schema inconsistencies"
+    echo "  - Partial migration state"
+    echo "  - Version tracking issues"
+    echo ""
+    echo "🔧 Attempting to diagnose the issue..."
+    python db_utils/manage_migrations.py status
+    echo ""
+    echo "💡 Manual intervention required:"
+    echo "  1. Check migration status above"
+    echo "  2. If schema is correct but version is wrong: python db_utils/manage_migrations.py stamp head"
+    echo "  3. If schema is wrong: fix the database manually or reset it"
+    echo "  4. Restart the application"
+    echo ""
     exit 1
 fi
 
